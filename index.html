@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research Studio — AI Paper Reader</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            moon: {
+              darkBg: '#0a0a0d',
+              darkPanel: '#121216',
+              darkCard: '#1a1a20',
+              darkBorder: '#27272f',
+              lightBg: '#f1f3f6',
+              lightPanel: '#ffffff',
+              lightCard: '#f7f8fa',
+              lightBorder: '#e4e4e7'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <!-- KaTeX for LaTeX Math -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <!-- Mozilla PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Mozilla PDF.js Viewer CSS for sharp, pixel-perfect text selection -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css" />
+  <!-- Marked.js -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-[#f1f3f6] dark:bg-[#0a0a0d] text-zinc-900 dark:text-zinc-100 h-screen w-screen overflow-hidden flex">
+
+  <!-- Hidden File Input for PDF Upload -->
+  <input type="file" id="pdf-upload-input" accept="application/pdf" class="hidden" onchange="app.handlePdfUpload(event)" />
+
+  <!-- =====================================================================
+       1A. LEFT SIDEBAR — COLLAPSED ICON RAIL
+       ===================================================================== -->
+  <aside id="left-sidebar-collapsed" class="hidden w-12 h-full bg-white dark:bg-[#121216] border-r border-zinc-200 dark:border-[#24242c] flex-col items-center justify-between py-3 shrink-0 z-30">
+    <div class="flex flex-col items-center gap-3">
+      <!-- Brand Logo Button -->
+      <button onclick="app.toggleLeftSidebar(true)" id="collapsed-brand-logo" class="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-md hover:scale-105 transition" title="사이드바 펼치기">
+        <div class="w-4 h-4 rounded-full bg-gradient-to-tr from-purple-200 to-white opacity-95"></div>
+      </button>
+
+      <button onclick="app.toggleLeftSidebar(true)" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="사이드바 열기">
+        <i data-lucide="panel-left-open" class="w-4 h-4"></i>
+      </button>
+
+      <button onclick="app.openExploreModal()" class="p-2 rounded-lg text-indigo-500 hover:bg-indigo-500/10 transition" title="실시간 논문 탐색 (OpenAlex / arXiv)">
+        <i data-lucide="compass" class="w-4 h-4"></i>
+      </button>
+
+      <button onclick="app.openLibraryModal()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="내 라이브러리 열기">
+        <i data-lucide="book-open" class="w-4 h-4"></i>
+      </button>
+
+      <button onclick="app.saveCurrentToLibrary()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="라이브러리에 저장">
+        <i data-lucide="star" class="w-4 h-4"></i>
+      </button>
+
+      <button onclick="document.getElementById('pdf-upload-input').click()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="PDF 업로드">
+        <i data-lucide="file-up" class="w-4 h-4"></i>
+      </button>
+
+      <div class="w-5 h-[1px] bg-zinc-200 dark:bg-zinc-800 my-0.5"></div>
+
+      <button onclick="app.openMyActivityModal()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="내 독서 활동 기록 (My Activity)">
+        <i data-lucide="history" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="flex flex-col items-center gap-2.5">
+      <button onclick="app.openBrandStudioModal()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="나만의 브랜드 커스터마이징">
+        <i data-lucide="palette" class="w-4 h-4"></i>
+      </button>
+      <button onclick="app.toggleTheme()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="라이트/다크 모드 전환">
+        <i data-lucide="sun" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </aside>
+
+  <!-- =====================================================================
+       1B. LEFT SIDEBAR — EXPANDED FULL PANEL
+       ===================================================================== -->
+  <aside id="left-sidebar-expanded" class="w-[242px] h-full bg-white dark:bg-[#121216] border-r border-zinc-200 dark:border-[#24242c] flex flex-col justify-between shrink-0 z-30 select-none">
+    <div class="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+      <!-- Customizable Brand Header -->
+      <div class="flex items-center justify-between px-1">
+        <button onclick="app.openBrandStudioModal()" class="flex items-center gap-2 text-left group" title="클릭하여 나만의 서비스 이름·테마 변경">
+          <div id="expanded-brand-logo" class="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-sm group-hover:scale-105 transition">
+            <div class="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-purple-200 to-white"></div>
+          </div>
+          <div class="leading-tight">
+            <span id="brand-name-display" class="font-bold text-[15px] tracking-tight text-zinc-900 dark:text-white block">Research Studio</span>
+            <span id="brand-sub-display" class="text-[9px] font-semibold text-indigo-500 uppercase tracking-wider block">AI Paper Reader</span>
+          </div>
+        </button>
+        <button onclick="app.toggleLeftSidebar(false)" class="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="사이드바 접기">
+          <i data-lucide="panel-left-close" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Core Navigation Actions -->
+      <div class="space-y-0.5 text-[13px]">
+        <button onclick="app.showOnboardingHome()" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition font-medium">
+          <i data-lucide="home" class="w-4 h-4 text-zinc-500 dark:text-zinc-400"></i>
+          <span>시작 화면 (새 문서 열기)</span>
+        </button>
+
+        <button onclick="app.openExploreModal()" class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-500/20 transition font-semibold">
+          <span class="flex items-center gap-2.5">
+            <i data-lucide="compass" class="w-4 h-4"></i>
+            <span>실시간 논문 탐색</span>
+          </span>
+          <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 font-bold">LIVE</span>
+        </button>
+
+        <button onclick="app.openLibraryModal()" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition font-medium">
+          <i data-lucide="book-open" class="w-4 h-4 text-zinc-500 dark:text-zinc-400"></i>
+          <span>라이브러리 열기</span>
+        </button>
+
+        <button onclick="app.saveCurrentToLibrary()" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition font-medium">
+          <i data-lucide="star" id="expanded-star-icon" class="w-4 h-4 text-zinc-500 dark:text-zinc-400"></i>
+          <span id="expanded-star-label">라이브러리에 저장</span>
+        </button>
+
+        <button onclick="document.getElementById('pdf-upload-input').click()" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition font-medium">
+          <i data-lucide="file-up" class="w-4 h-4 text-zinc-500 dark:text-zinc-400"></i>
+          <span>PDF 업로드 (영구 저장)</span>
+        </button>
+
+        <button onclick="app.openUrlLoadPrompt()" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition font-medium">
+          <i data-lucide="link" class="w-4 h-4 text-zinc-500 dark:text-zinc-400"></i>
+          <span>arXiv / PDF URL 열기</span>
+        </button>
+      </div>
+
+      <!-- 관련 논문 (Live Library-Based Paper Recommendation Card) -->
+      <div class="space-y-1.5 pt-1">
+        <div class="px-1 flex items-center justify-between text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">
+          <span>관련 논문 추천</span>
+          <button onclick="app.refreshLiveRecommendations()" class="hover:text-indigo-400" title="실시간 학술 그래프 재추천">↻</button>
+        </div>
+        <div id="sidebar-related-card" onclick="app.openRelatedPapersModal()" class="related-paper-card cursor-pointer p-3 rounded-xl bg-gradient-to-br from-purple-50/70 via-white to-pink-50/50 dark:from-[#1d1829] dark:via-[#17171d] dark:to-[#211726] border border-purple-200/80 dark:border-purple-500/25 hover:border-purple-400 transition shadow-sm">
+          <div class="flex items-center justify-between mb-1.5">
+            <span id="rel-card-match" class="px-1.5 py-0.5 rounded bg-zinc-200/80 dark:bg-zinc-800 text-[10px] font-bold text-zinc-700 dark:text-zinc-300">대기 중</span>
+            <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+          </div>
+          <div id="rel-card-label" class="text-[10px] font-bold text-purple-600 dark:text-purple-400 mb-0.5">맞춤 논문 추천</div>
+          <div id="rel-card-title" class="text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">열람 중인 논문이 없습니다</div>
+          <p id="rel-card-desc" class="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">논문을 열면 연관 학술 문헌을 추천합니다</p>
+          <div class="mt-2 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 flex items-center gap-0.5 hover:text-purple-600 dark:hover:text-purple-300">
+            <span id="rel-card-more">논문 탐색 열기</span>
+            <i data-lucide="chevron-right" class="w-3 h-3"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- 내 자료 (최근 / 폴더 / 활동) -->
+      <div class="space-y-2 pt-1">
+        <div class="px-1 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">내 자료 (IndexedDB 연동)</div>
+        <div class="grid grid-cols-2 bg-zinc-100 dark:bg-[#1a1a20] p-0.5 rounded-lg border border-zinc-200/70 dark:border-zinc-800 text-xs">
+          <button id="tab-mat-recent" onclick="app.switchLeftMaterialTab('recent')" class="py-1 rounded-md font-semibold flex items-center justify-center gap-1 bg-white dark:bg-[#272730] text-zinc-900 dark:text-white shadow-sm transition">
+            <i data-lucide="clock" class="w-3 h-3"></i>
+            <span>최근</span>
+          </button>
+          <button id="tab-mat-folder" onclick="app.switchLeftMaterialTab('folder')" class="py-1 rounded-md font-medium flex items-center justify-center gap-1 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition">
+            <i data-lucide="folder" class="w-3 h-3"></i>
+            <span>폴더</span>
+          </button>
+        </div>
+
+        <div id="left-materials-list" class="space-y-1 pt-0.5"></div>
+      </div>
+    </div>
+
+    <!-- Bottom Fixed Footer (Brand Customizer & Light Mode Switch) -->
+    <div class="p-3 border-t border-zinc-200 dark:border-[#24242c] space-y-1.5 text-[13px]">
+      <button onclick="app.openBrandStudioModal()" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition font-medium">
+        <i data-lucide="palette" class="w-4 h-4 text-indigo-500"></i>
+        <span>나만의 브랜드 커스텀</span>
+      </button>
+
+      <div onclick="app.toggleTheme()" class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700/80 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition">
+        <div class="flex items-center gap-2.5 font-medium text-zinc-800 dark:text-zinc-200">
+          <i data-lucide="sun" class="w-4 h-4 text-zinc-500 dark:text-zinc-400"></i>
+          <span>라이트 모드</span>
+        </div>
+        <div id="light-mode-switch-track" class="w-8 h-4 rounded-full bg-zinc-300 dark:bg-zinc-700 relative transition-colors flex items-center px-0.5">
+          <div id="light-mode-switch-knob" class="w-3 h-3 rounded-full bg-white shadow transform transition-transform translate-x-4 dark:translate-x-0"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- =====================================================================
+       2. MAIN WORKSPACE (Top Toolbar + Center PDF Viewer + Right AI Panel)
+       ===================================================================== -->
+  <div class="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+
+    <!-- ================= TOP VIEWER TOOLBAR ================= -->
+    <header class="h-11 bg-white dark:bg-[#121216] border-b border-zinc-200 dark:border-[#24242c] px-3 flex items-center justify-between shrink-0 z-20 select-none overflow-hidden">
+      <div class="w-12 hidden xl:block"></div>
+
+      <div class="flex items-center gap-1 sm:gap-1.5 overflow-x-auto overflow-y-hidden no-scrollbar h-full">
+        <!-- Outline / Thumbnail Grid -->
+        <button onclick="app.toggleOutlineDrawer()" class="p-1.5 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="목차 및 섹션 점프 (Outline)">
+          <i data-lucide="layout-grid" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Document Info & BibTeX (Moonlight 논문 정보) -->
+        <button id="toolbar-btn-info" onclick="app.togglePaperInfoPopover(event)" class="p-1.5 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="논문 정보 (서지 정보 · 인용 · 읽을 가치)">
+          <i data-lucide="info" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Search in Paper -->
+        <button onclick="app.toggleSearchBar()" class="p-1.5 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="본문 내 검색">
+          <i data-lucide="search" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Zoom Select -->
+        <select id="zoom-select" onchange="app.handleZoomSelect(this.value)" class="bg-zinc-100 dark:bg-[#1e1e24] border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-200 focus:outline-none">
+          <option value="100">자동</option>
+          <option value="75">75%</option>
+          <option value="90">90%</option>
+          <option value="100">100%</option>
+          <option value="115">115%</option>
+          <option value="130">130%</option>
+          <option value="150">150%</option>
+          <option value="175">175%</option>
+          <option value="200">200%</option>
+        </select>
+
+        <button onclick="app.adjustZoom(-10)" class="p-1 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="축소">
+          <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+        </button>
+        <button onclick="app.adjustZoom(10)" class="p-1 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="확대">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+        </button>
+
+        <!-- Page Indicator with Custom Stepper Spinner -->
+        <div class="flex items-center bg-zinc-100 dark:bg-[#1e1e24] border border-zinc-200 dark:border-zinc-700/80 rounded-md pl-1.5 pr-2.5 py-0.5 text-xs font-medium group">
+          <input id="page-num-input" type="number" min="1" value="0"
+                 onchange="app.jumpToPage(this.value)"
+                 onkeydown="if(event.key==='ArrowUp'){event.preventDefault();app.stepPage(1);}else if(event.key==='ArrowDown'){event.preventDefault();app.stepPage(-1);}"
+                 onwheel="event.preventDefault();app.stepPage(event.deltaY < 0 ? 1 : -1)"
+                 class="w-7 sm:w-8 bg-transparent text-center font-semibold text-zinc-900 dark:text-zinc-100 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none p-0 select-text" />
+          
+          <!-- Stepper Up/Down Buttons (▲ / ▼) -->
+          <div class="flex flex-col items-center justify-center -space-y-0.5 px-0.5">
+            <button type="button" onclick="app.stepPage(1)" title="다음 페이지 (▲)"
+                    class="p-0.5 leading-none text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 active:scale-90 transition">
+              <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 16 16"><path d="M8 4l4.5 6h-9z"/></svg>
+            </button>
+            <button type="button" onclick="app.stepPage(-1)" title="이전 페이지 (▼)"
+                    class="p-0.5 leading-none text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 active:scale-90 transition">
+              <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 16 16"><path d="M8 12l4.5-6h-9z"/></svg>
+            </button>
+          </div>
+
+          <span class="text-zinc-400 select-none ml-0.5">/</span>
+          <span id="total-pages-label" class="text-zinc-500 dark:text-zinc-400 min-w-[16px] text-center select-none ml-1">0</span>
+        </div>
+
+        <div class="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800 mx-1"></div>
+
+        <!-- 1. 오토 하이라이트 (Hover Flyout: #flyout-autohl) -->
+        <button id="toolbar-btn-autohl"
+                onclick="app.toggleAutoHighlights()"
+                onmouseenter="app.showToolbarHoverFlyout('autohl')"
+                onmouseleave="app.hideToolbarHoverFlyout('autohl')"
+                class="px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-transparent transition"
+                title="AI가 논문의 핵심을 자동으로 하이라이트">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-500"></i>
+          <span class="whitespace-nowrap">오토 하이라이트</span>
+        </button>
+
+        <!-- 2. 이미지 설명 (Hover Flyout: #flyout-imagespec) -->
+        <button id="toolbar-btn-imagespec"
+                onclick="app.activateRegionCapture()"
+                onmouseenter="app.showToolbarHoverFlyout('imagespec')"
+                onmouseleave="app.hideToolbarHoverFlyout('imagespec')"
+                class="px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-transparent transition"
+                title="마우스 드래그로 그림·표·수식 바운딩 박스를 지정해 비전 AI 설명 및 LaTeX 추출">
+          <svg class="w-3.5 h-3.5 stroke-current fill-none stroke-2 text-zinc-700 dark:text-zinc-200" viewBox="0 0 24 24">
+            <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" stroke-width="2" stroke-linecap="round"/>
+            <rect x="7" y="7" width="10" height="10" stroke-width="1.5" stroke-dasharray="2 2" rx="1"/>
+          </svg>
+          <span class="whitespace-nowrap">이미지 설명</span>
+        </button>
+
+        <!-- 3. 레이아웃 유지 번역 (Hover Flyout: #flyout-layouttrans) -->
+        <button id="toolbar-btn-layout-trans"
+                onclick="app.toggleLayoutTranslation()"
+                onmouseenter="app.showToolbarHoverFlyout('layouttrans')"
+                onmouseleave="app.hideToolbarHoverFlyout('layouttrans')"
+                class="px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-transparent transition"
+                title="PDF 원본 레이아웃을 보존한 1:1 대조 번역">
+          <i data-lucide="languages" class="w-3.5 h-3.5 text-zinc-600 dark:text-zinc-300"></i>
+          <span class="whitespace-nowrap">레이아웃 유지 번역</span>
+        </button>
+
+        <div class="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800 mx-1"></div>
+
+        <!-- User Profile Badge + Settings + Export -->
+        <div class="flex items-center gap-1.5">
+          <div onclick="app.openBrandStudioModal()" class="cursor-pointer flex items-center gap-1.5 pl-1 pr-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-[#1e1e26] border border-zinc-200 dark:border-zinc-700/80" title="클릭하여 프로필 및 브랜드 수정">
+            <div id="user-avatar-badge" class="relative w-5 h-5 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center">
+              G
+            </div>
+            <span id="user-plan-badge" class="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 whitespace-nowrap">Workspace</span>
+          </div>
+
+          <button onclick="app.openSettingsModal('general')" class="p-1.5 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="설정 (기본 설정 · 화면 설정 · 프롬프트 개인화)">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+          </button>
+
+          <!-- Export Options Button (Moonlight 내보내기 옵션) -->
+          <button id="toolbar-btn-export" onclick="app.toggleExportPopover(event)"
+                  class="p-1.5 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition shrink-0"
+                  title="내보내기 옵션">
+            <svg class="w-4 h-4 stroke-current fill-none stroke-2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+              <polyline points="16 6 12 2 8 6"></polyline>
+              <line x1="12" y1="2" x2="12" y2="15"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="w-6 hidden xl:block"></div>
+    </header>
+
+    <!-- ================= BODY: CENTER PAPER VIEWPORT + RIGHT AI PANEL ================= -->
+    <div class="flex-1 flex min-h-0 overflow-hidden relative">
+
+      <!-- CENTER PAPER VIEWPORT -->
+      <main id="center-viewport"
+            ondragover="app.handleDragOver(event)"
+            ondragleave="app.handleDragLeave(event)"
+            ondrop="app.handleDropPdf(event)"
+            class="flex-1 h-full overflow-y-auto overflow-x-auto relative bg-[#ebedf0] dark:bg-[#09090c] px-4 sm:px-8 py-6">
+
+        <!-- Search Bar Popover -->
+        <div id="in-paper-search-bar" class="hidden sticky top-2 z-30 max-w-sm ml-auto mr-4 mb-2 bg-white dark:bg-[#1a1a22] border border-zinc-300 dark:border-zinc-700 rounded-xl shadow-lg px-3 py-1.5 flex items-center gap-2">
+          <i data-lucide="search" class="w-3.5 h-3.5 text-zinc-400"></i>
+          <input id="in-paper-search-input" type="text" placeholder="논문 본문 내 키워드 검색..." oninput="app.performInPaperSearch(this.value)" class="flex-1 bg-transparent text-xs focus:outline-none" />
+          <button onclick="app.toggleSearchBar(false)" class="text-zinc-400 hover:text-zinc-600">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <!-- Outline Drawer Overlay -->
+        <div id="outline-drawer" class="hidden fixed top-14 left-16 z-40 w-72 bg-white dark:bg-[#181820] border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl p-4 space-y-3 floating-anim">
+          <div class="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
+            <span class="text-xs font-bold flex items-center gap-1.5">
+              <i data-lucide="list-tree" class="w-4 h-4 text-indigo-500"></i>
+              논문 구조 목차 (Outline)
+            </span>
+            <button onclick="app.toggleOutlineDrawer(false)" class="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div id="outline-drawer-list" class="space-y-1 text-xs max-h-80 overflow-y-auto"></div>
+        </div>
+
+        <!-- Moonlight Paper Info Popover (논문 정보 팝오버) -->
+        <div id="paper-info-popover" class="hidden fixed top-12 left-6 sm:left-12 z-50 w-[94vw] max-w-[530px] bg-white dark:bg-[#16161d] border border-zinc-200 dark:border-zinc-700/90 rounded-2xl shadow-2xl p-5 space-y-3.5 floating-anim select-none" onclick="event.stopPropagation()">
+          
+          <!-- Top Section: Blue Accent Bar + Title + Copy Button + Authors + Year -->
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-start gap-3 flex-1 min-w-0">
+              <!-- Blue vertical accent bar -->
+              <div class="w-1 self-stretch bg-[#2563eb] dark:bg-[#3b82f6] rounded-full shrink-0 mt-0.5 min-h-[38px]"></div>
+              
+              <div class="flex-1 min-w-0 space-y-1">
+                <a id="paper-info-title-link" href="#" target="_blank"
+                   class="text-[15px] font-bold text-[#2563eb] dark:text-[#3b82f6] leading-snug hover:underline block break-words select-text">
+                  논문 제목
+                </a>
+                <div id="paper-info-authors" class="text-[13px] text-zinc-600 dark:text-zinc-300 font-medium truncate select-text">
+                  저자 목록
+                </div>
+                <div id="paper-info-year" class="text-[12.5px] text-zinc-400 dark:text-zinc-500 font-normal">
+                  2025
+                </div>
+              </div>
+            </div>
+
+            <!-- Header Quick Copy Button -->
+            <button onclick="app.copyPaperMetadata(this)" class="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition shrink-0" title="논문 서지 정보 복사">
+              <i data-lucide="copy" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- Divider -->
+          <div class="h-[1px] bg-zinc-100 dark:bg-zinc-800"></div>
+
+          <!-- Action Row: [0회 인용 ↗] [인용 가져오기] --- [읽을 가치 알아보기] -->
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <div class="flex items-center gap-2">
+              <a id="paper-info-citations-btn" href="#" target="_blank"
+                 class="px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-[#1a1a22] text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition flex items-center gap-1.5 shadow-sm">
+                <span id="paper-info-citations-count">0회 인용</span>
+                <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 text-zinc-400"></i>
+              </a>
+
+              <button type="button" onclick="app.focusCitationCard()"
+                      class="px-3.5 py-1.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold hover:bg-zinc-800 dark:hover:bg-white transition shadow-sm">
+                인용 가져오기
+              </button>
+            </div>
+
+            <!-- "읽을 가치 알아보기" with Hover Tooltip -->
+            <div class="relative">
+              <button type="button" id="btn-read-value" onclick="app.evaluateReadingValue()"
+                      onmouseenter="app.showReadValueTooltip(true)"
+                      onmouseleave="app.showReadValueTooltip(false)"
+                      class="px-3.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-500"></i>
+                <span>읽을 가치 알아보기</span>
+              </button>
+
+              <!-- Dark Tooltip matching Screenshot 2 -->
+              <div id="read-value-tooltip" class="hidden absolute right-0 top-full mt-2 z-50 w-72 p-3 rounded-xl bg-[#202026] text-white text-[11.5px] leading-relaxed shadow-2xl border border-zinc-700 pointer-events-none floating-anim">
+                <div class="flex items-start gap-1.5">
+                  <span class="text-sm shrink-0">💡</span>
+                  <span>내 라이브러리의 관심사에 해당하는 논문일수록 더 깊이 읽으라고 알려줘요. <strong>정독·훑어보기·초록만·패스</strong> 중 하나가 나와요.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dynamic Reading Value Assessment Result Box (Appears when clicked) -->
+          <div id="reading-value-result-box" class="hidden rounded-xl border border-indigo-500/30 bg-indigo-50/60 dark:bg-indigo-950/20 p-3 space-y-1.5 text-xs"></div>
+
+          <!-- Citation Formats Card (BibTeX, APA, Vancouver, Harvard) -->
+          <div id="paper-citation-card" class="rounded-2xl border border-zinc-200 dark:border-zinc-700/80 bg-zinc-50/40 dark:bg-[#181820] p-4 space-y-3">
+            <!-- Citation Tabs Header -->
+            <div class="flex items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800 pb-2">
+              <div class="flex items-center gap-4 text-xs font-medium">
+                <button type="button" onclick="app.switchCitationTab('bibtex')" id="cite-tab-bibtex" class="font-bold text-zinc-900 dark:text-white border-b-2 border-zinc-900 dark:border-white pb-1 transition">BibTeX</button>
+                <button type="button" onclick="app.switchCitationTab('apa')" id="cite-tab-apa" class="font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 pb-1 transition">APA</button>
+                <button type="button" onclick="app.switchCitationTab('vancouver')" id="cite-tab-vancouver" class="font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 pb-1 transition">Vancouver</button>
+                <button type="button" onclick="app.switchCitationTab('harvard')" id="cite-tab-harvard" class="font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 pb-1 transition">Harvard</button>
+              </div>
+
+              <!-- Copy Formatted Citation Button -->
+              <button onclick="app.copyCurrentCitation(this)" class="p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-white dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition" title="인용 형식 복사">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+
+            <!-- Citation Text Content -->
+            <pre id="citation-code-display" class="font-mono text-[11.5px] text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words leading-relaxed max-h-48 overflow-y-auto select-all"></pre>
+          </div>
+
+        </div>
+
+        <!-- Moonlight Export Options Popover (내보내기 옵션 팝오버) -->
+        <div id="export-options-popover" class="hidden fixed top-12 right-4 sm:right-6 z-50 w-72 bg-white dark:bg-[#16161d] border border-zinc-200 dark:border-zinc-700/90 rounded-2xl shadow-2xl p-4 space-y-3.5 floating-anim select-none" onclick="event.stopPropagation()">
+          
+          <!-- Top Action Buttons -->
+          <div class="space-y-2">
+            <!-- 1. 공유 링크 만들기 -->
+            <button type="button" onclick="app.createShareLink()"
+                    class="w-full py-2.5 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700/80 bg-white dark:bg-[#1a1a22] text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-2 shadow-sm">
+              <i data-lucide="link" class="w-3.5 h-3.5 text-zinc-400"></i>
+              <span>공유 링크 만들기</span>
+            </button>
+
+            <!-- 2. 시계 방향으로 회전 -->
+            <button type="button" onclick="app.rotateClockwise()"
+                    class="w-full py-2.5 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700/80 bg-white dark:bg-[#1a1a22] text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-2 shadow-sm">
+              <i data-lucide="rotate-cw" class="w-3.5 h-3.5 text-zinc-400"></i>
+              <span>시계 방향으로 회전</span>
+            </button>
+
+            <!-- 3. 파일 정보 -->
+            <button type="button" onclick="app.showFileInfoModal()"
+                    class="w-full py-2.5 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700/80 bg-white dark:bg-[#1a1a22] text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-2 shadow-sm">
+              <i data-lucide="info" class="w-3.5 h-3.5 text-zinc-400"></i>
+              <span>파일 정보</span>
+            </button>
+          </div>
+
+          <!-- Divider -->
+          <div class="h-[1px] bg-zinc-100 dark:bg-zinc-800"></div>
+
+          <!-- Translation Options Toggles -->
+          <div class="space-y-3 px-1 py-0.5">
+            <!-- Toggle: 페이지 번역 포함 -->
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-[13px] font-semibold text-zinc-800 dark:text-zinc-200">페이지 번역 포함</span>
+              <button id="toggle-export-page-trans" type="button" onclick="app.toggleExportPageTransOption()"
+                      class="w-11 h-6 rounded-full bg-zinc-300 dark:bg-zinc-700 relative transition-colors flex items-center px-0.5 shrink-0">
+                <span id="knob-export-page-trans" class="w-5 h-5 rounded-full bg-white shadow transition-transform translate-x-0"></span>
+              </button>
+            </div>
+
+            <!-- Toggle: 레이아웃 유지 번역 -->
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-[13px] font-semibold text-zinc-800 dark:text-zinc-200">레이아웃 유지 번역</span>
+              <button id="toggle-export-layout-trans" type="button" onclick="app.toggleExportLayoutTransOption()"
+                      class="w-11 h-6 rounded-full bg-zinc-900 dark:bg-white relative transition-colors flex items-center px-0.5 shrink-0">
+                <span id="knob-export-layout-trans" class="w-5 h-5 rounded-full bg-white dark:bg-zinc-900 shadow transition-transform translate-x-5"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Bottom Action Buttons: [다운로드] [인쇄] -->
+          <div class="flex items-center gap-2 pt-1">
+            <button type="button" onclick="app.executeExportDownload()"
+                    class="flex-1 py-2.5 px-3 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold hover:bg-zinc-800 dark:hover:bg-white transition flex items-center justify-center gap-1.5 shadow-sm">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>다운로드</span>
+            </button>
+
+            <button type="button" onclick="app.executeExportPrint()"
+                    class="flex-1 py-2.5 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-[#1a1a22] text-zinc-800 dark:text-zinc-200 text-xs font-bold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-1.5 shadow-sm">
+              <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+              <span>인쇄</span>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- =====================================================================
+             TOOLBAR HOVER FLYOUT 1: 오토하이라이트 (Hovered from #toolbar-btn-autohl)
+             ===================================================================== -->
+        <div id="flyout-autohl"
+             class="hidden fixed z-50 w-[335px] bg-white dark:bg-[#181820] border border-zinc-200/90 dark:border-zinc-700/80 rounded-2xl shadow-2xl select-none transition-all duration-150 toolbar-hover-flyout"
+             onmouseenter="app.onToolbarFlyoutEnter('autohl')"
+             onmouseleave="app.onToolbarFlyoutLeave('autohl')"
+             onclick="event.stopPropagation()">
+          
+          <!-- Top Row: Title + Start Button -->
+          <div class="p-4 pb-3 flex items-start justify-between gap-3">
+            <div class="flex-1 pr-1">
+              <h4 class="text-[15px] font-bold text-zinc-900 dark:text-white tracking-tight">오토하이라이트</h4>
+              <p class="text-[12px] text-zinc-500 dark:text-zinc-400 mt-1 leading-snug">AI가 논문의 핵심을 자동으로 하이라이트합니다</p>
+            </div>
+            <button type="button"
+                    onclick="app.startAutoHighlightProcess()"
+                    class="px-4 py-2 rounded-xl bg-[#262626] hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 text-xs font-bold transition shadow-sm cursor-pointer shrink-0 active:scale-95">
+              Start
+            </button>
+          </div>
+
+          <div class="h-[1px] bg-zinc-100 dark:bg-zinc-800 mx-4"></div>
+
+          <!-- Color Set Section -->
+          <div class="p-4 pt-3 pb-3 space-y-1">
+            <div class="text-[12px] text-zinc-400 dark:text-zinc-500 font-medium mb-1.5">컬러 세트</div>
+            
+            <!-- Option 1: Moonlight Basic (Selected) -->
+            <div id="preset-btn-basic"
+                 onclick="app.selectAutoHighlightPreset('basic')"
+                 class="flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-100/80 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/60 cursor-pointer transition">
+              <div class="flex items-center">
+                <span id="radio-dot-basic" class="w-4 h-4 rounded-full border-2 border-indigo-600 flex items-center justify-center mr-2.5">
+                  <span class="w-2 h-2 rounded-full bg-indigo-600"></span>
+                </span>
+                <div class="flex items-center gap-1.5 mr-2.5">
+                  <span class="w-3.5 h-3.5 rounded-full bg-[#fecdd3] shadow-xs inline-block"></span>
+                  <span class="w-3.5 h-3.5 rounded-full bg-[#bbf7d0] shadow-xs inline-block"></span>
+                  <span class="w-3.5 h-3.5 rounded-full bg-[#bfdbfe] shadow-xs inline-block"></span>
+                </div>
+                <span class="text-[13px] font-medium text-zinc-800 dark:text-zinc-200">Moonlight Basic</span>
+              </div>
+            </div>
+
+            <!-- Option 2: Deep Spread -->
+            <div id="preset-btn-deep"
+                 onclick="app.selectAutoHighlightPreset('deep')"
+                 class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 border border-transparent cursor-pointer transition">
+              <div class="flex items-center">
+                <span id="radio-dot-deep" class="w-4 h-4 rounded-full border border-zinc-300 dark:border-zinc-600 flex items-center justify-center mr-2.5">
+                  <span class="w-2 h-2 rounded-full bg-transparent"></span>
+                </span>
+                <div class="flex items-center gap-1.5 mr-2.5">
+                  <span class="w-3.5 h-3.5 rounded-full bg-[#fed7aa] shadow-xs inline-block"></span>
+                  <span class="w-3.5 h-3.5 rounded-full bg-[#99f6e4] shadow-xs inline-block"></span>
+                  <span class="w-3.5 h-3.5 rounded-full bg-[#ddd6fe] shadow-xs inline-block"></span>
+                </div>
+                <span class="text-[13px] font-medium text-zinc-700 dark:text-zinc-300">Deep Spread</span>
+              </div>
+            </div>
+
+            <!-- Option 3: Point Stroke -->
+            <div id="preset-btn-stroke"
+                 onclick="app.selectAutoHighlightPreset('stroke')"
+                 class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 border border-transparent cursor-pointer transition">
+              <div class="flex items-center">
+                <span id="radio-dot-stroke" class="w-4 h-4 rounded-full border border-zinc-300 dark:border-zinc-600 flex items-center justify-center mr-2.5">
+                  <span class="w-2 h-2 rounded-full bg-transparent"></span>
+                </span>
+                <div class="flex items-center gap-1.5 mr-2.5">
+                  <span class="w-3.5 h-1 rounded-full bg-zinc-600 dark:bg-zinc-400 inline-block"></span>
+                  <span class="w-3.5 h-1 border-b-2 border-dashed border-zinc-600 dark:border-zinc-400 inline-block mb-0.5"></span>
+                  <span class="w-3.5 h-1 border-y border-zinc-600 dark:border-zinc-400 inline-block"></span>
+                </div>
+                <span class="text-[13px] font-medium text-zinc-700 dark:text-zinc-300">Point Stroke</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="h-[1px] bg-zinc-100 dark:bg-zinc-800 mx-4"></div>
+
+          <!-- Bottom Legend: 독창성, 방법, 결과 -->
+          <div class="px-4 py-3 flex items-center gap-4 text-[12px] text-zinc-500 dark:text-zinc-400">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#fca5a5]"></span>
+              <span>독창성</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#86efac]"></span>
+              <span>방법</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#93c5fd]"></span>
+              <span>결과</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- =====================================================================
+             TOOLBAR HOVER FLYOUT 2: 이미지 설명 (Hovered from #toolbar-btn-imagespec)
+             ===================================================================== -->
+        <div id="flyout-imagespec"
+             class="hidden fixed z-50 w-[385px] bg-white dark:bg-[#181820] border border-zinc-200/90 dark:border-zinc-700/80 rounded-2xl shadow-2xl p-5 select-none transition-all duration-150 toolbar-hover-flyout"
+             onmouseenter="app.onToolbarFlyoutEnter('imagespec')"
+             onmouseleave="app.onToolbarFlyoutLeave('imagespec')"
+             onclick="event.stopPropagation()">
+          
+          <div class="flex items-start gap-4">
+            <!-- Left Column: Visual Illustration + Shortcut Badge -->
+            <div class="w-[105px] shrink-0 flex flex-col items-center justify-between self-stretch pt-1">
+              
+              <!-- Dashed Bounding Box with Oval and Cursor Arrow -->
+              <div class="w-24 h-20 border-2 border-dotted border-zinc-300 dark:border-zinc-600 rounded-xl relative flex items-center justify-center bg-zinc-50/50 dark:bg-zinc-800/30">
+                <!-- Center gray oval -->
+                <div class="w-14 h-7 rounded-full bg-zinc-300/80 dark:bg-zinc-600/80"></div>
+                <!-- Cursor arrow at bottom-right corner -->
+                <svg class="w-5 h-5 text-zinc-600 dark:text-zinc-300 absolute -bottom-2 -right-2 drop-shadow-sm" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 0l16 12.279-6.951 1.17 4.325 8.817-3.596 1.734-4.35-8.879-5.428 5.428z"/>
+                </svg>
+              </div>
+
+              <!-- Shortcut Badge: [Ctrl] + [🖱️] -->
+              <div class="mt-4 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300">
+                <span class="text-[11px] font-semibold">Ctrl</span>
+                <span class="text-zinc-400 text-[11px]">+</span>
+                <!-- Mouse icon SVG -->
+                <svg class="w-3.5 h-4.5 stroke-current fill-none stroke-[1.75]" viewBox="0 0 16 22">
+                  <rect x="1" y="1" width="14" height="20" rx="7" />
+                  <line x1="8" y1="1" x2="8" y2="8" />
+                </svg>
+              </div>
+            </div>
+
+            <!-- Right Column: Explanatory Content -->
+            <div class="flex-1 space-y-3">
+              <div>
+                <h4 class="text-[15px] font-bold text-zinc-900 dark:text-white">이미지 설명</h4>
+                <p class="text-[12px] text-zinc-600 dark:text-zinc-300 leading-relaxed mt-1">
+                  텍스트 선택이 불가능한 그림, 표, 이미지에 대한 자세한 설명을 얻을 수 있습니다.
+                </p>
+              </div>
+
+              <div class="space-y-0.5">
+                <div class="text-[12px] font-bold text-zinc-900 dark:text-zinc-100">사용 방법</div>
+                <p class="text-[12px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  위 버튼을 눌러 이미지 설명 모드를 활성화하세요. 그런 다음 설명하고 싶은 영역을 드래그하세요.
+                </p>
+              </div>
+
+              <div class="space-y-0.5">
+                <div class="text-[12px] font-bold text-zinc-900 dark:text-zinc-100">빠른 실행</div>
+                <p class="text-[12px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  컨트롤 키를 누르면서 드래그하면 영역이 바로 선택됩니다.
+                </p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- =====================================================================
+             TOOLBAR HOVER FLYOUT 3: 레이아웃 유지 번역 (Hovered from #toolbar-btn-layout-trans)
+             ===================================================================== -->
+        <div id="flyout-layouttrans"
+             class="hidden fixed z-50 w-[395px] bg-white dark:bg-[#181820] border border-zinc-200/90 dark:border-zinc-700/80 rounded-2xl shadow-2xl p-5 select-none transition-all duration-150 toolbar-hover-flyout"
+             onmouseenter="app.onToolbarFlyoutEnter('layouttrans')"
+             onmouseleave="app.onToolbarFlyoutLeave('layouttrans')"
+             onclick="event.stopPropagation()">
+          
+          <div class="flex items-start gap-4">
+            <!-- Left Column: Two-Page Layout Comparison Diagram -->
+            <div class="w-[105px] shrink-0 flex items-center justify-center pt-2">
+              <div class="flex items-center gap-2">
+                <!-- Page 1 (Source PDF Skeleton) -->
+                <div class="w-11 h-14 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 p-1 flex flex-col justify-between shadow-xs">
+                  <div class="space-y-1">
+                    <div class="w-full h-1 bg-zinc-200 dark:bg-zinc-700 rounded-xs"></div>
+                    <div class="w-3/4 h-1 bg-zinc-200 dark:bg-zinc-700 rounded-xs"></div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-0.5 py-0.5">
+                    <div class="h-3 bg-zinc-100 dark:bg-zinc-700/50 rounded-xs border border-dashed border-zinc-300 dark:border-zinc-600"></div>
+                    <div class="h-3 bg-zinc-100 dark:bg-zinc-700/50 rounded-xs border border-dashed border-zinc-300 dark:border-zinc-600"></div>
+                  </div>
+                  <div class="space-y-0.5">
+                    <div class="w-full h-0.5 bg-zinc-200 dark:bg-zinc-700"></div>
+                    <div class="w-2/3 h-0.5 bg-zinc-200 dark:bg-zinc-700"></div>
+                  </div>
+                </div>
+
+                <!-- Arrow -->
+                <svg class="w-3.5 h-3.5 text-zinc-400 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                  <path fill-rule="evenodd" d="M1 8a.75.75 0 01.75-.75h10.69l-3.72-3.72a.75.75 0 111.06-1.06l5 5a.75.75 0 010 1.06l-5 5a.75.75 0 11-1.06-1.06l3.72-3.72H1.75A.75.75 0 011 8z"/>
+                </svg>
+
+                <!-- Page 2 (Translated PDF Skeleton) -->
+                <div class="w-11 h-14 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 p-1 flex flex-col justify-between shadow-xs">
+                  <div class="space-y-1">
+                    <div class="w-full h-1 bg-indigo-200 dark:bg-indigo-900/60 rounded-xs"></div>
+                    <div class="w-3/4 h-1 bg-indigo-200 dark:bg-indigo-900/60 rounded-xs"></div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-0.5 py-0.5">
+                    <div class="h-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-xs border border-indigo-300 dark:border-indigo-700"></div>
+                    <div class="h-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-xs border border-indigo-300 dark:border-indigo-700"></div>
+                  </div>
+                  <div class="space-y-0.5">
+                    <div class="w-full h-0.5 bg-indigo-200 dark:bg-indigo-900/60"></div>
+                    <div class="w-2/3 h-0.5 bg-indigo-200 dark:bg-indigo-900/60"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Explanatory Content -->
+            <div class="flex-1 space-y-3">
+              <div>
+                <h4 class="text-[15px] font-bold text-zinc-900 dark:text-white">레이아웃 유지 번역</h4>
+                <p class="text-[12px] text-zinc-600 dark:text-zinc-300 leading-relaxed mt-1">
+                  PDF 레이아웃을 유지한 번역본을 만들고 원본과 나란히 비교하며 읽을 수 있어요.
+                </p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Top-Left Library Save Prompt Toast (Hidden until paper opens) -->
+        <div id="library-prompt-toast" class="hidden sticky top-1 left-2 z-20 max-w-[335px] mb-2 rounded-2xl bg-white/95 dark:bg-[#17171d]/95 border border-zinc-200/90 dark:border-zinc-700/80 shadow-xl px-4 py-3 backdrop-blur-md flex items-center justify-between gap-3 select-none">
+          <div class="space-y-1">
+            <div class="text-xs font-bold text-zinc-900 dark:text-white">논문을 내 라이브러리에 영구 저장해보세요</div>
+            <div class="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">하이라이트, 주석, 요약이 로컬 DB에 보존됩니다</div>
+            <label class="inline-flex items-center gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 cursor-pointer pt-0.5">
+              <input type="checkbox" onchange="if(this.checked) app.dismissLibraryToast()" class="rounded border-zinc-400 accent-indigo-500 w-3 h-3" />
+              <span>다시 보지 않기</span>
+            </label>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button onclick="app.saveCurrentToLibrary()" class="px-3 py-1.5 rounded-full text-[11px] font-bold border border-zinc-300 dark:border-zinc-500 bg-white dark:bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white whitespace-nowrap transition">
+              라이브러리에 추가
+            </button>
+            <button onclick="app.dismissLibraryToast()" class="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+              <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right-Edge Floating Page Translation Widget (Hidden until paper opens) -->
+        <div id="page-translate-widget" class="hidden sticky top-6 float-right z-20 mr-1 page-translate-tab w-14 rounded-2xl bg-white dark:bg-[#22222a] border border-zinc-200 dark:border-zinc-700/80 py-3 px-1.5 flex flex-col items-center text-center gap-2 select-none">
+          <div class="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-700 dark:text-zinc-200">
+            <i data-lucide="globe" class="w-4 h-4"></i>
+          </div>
+          <div class="text-[11px] font-bold leading-tight text-zinc-800 dark:text-zinc-100">
+            페이지<br />번역
+          </div>
+          <div class="text-[10px] text-zinc-400 dark:text-zinc-400 leading-tight">
+            모든<br />페이지
+          </div>
+          <button id="page-trans-start-btn" onclick="app.togglePageTranslation()" class="w-full py-1 rounded-lg bg-zinc-900 dark:bg-zinc-950 hover:bg-indigo-600 dark:hover:bg-indigo-600 text-white text-[11px] font-bold transition">
+            시작
+          </button>
+        </div>
+
+        <!-- Dedicated Page Translation Font Size Control Bar (Shown when 페이지 번역 is active & 페이지 번역 별도 크기 is ON) -->
+        <div id="page-trans-fontsize-bar" class="hidden sticky top-2 z-20 max-w-lg mx-auto mb-4 px-4 py-2 rounded-2xl bg-white/95 dark:bg-[#1a1a24]/95 border border-indigo-500/35 shadow-lg backdrop-blur-md flex items-center justify-between gap-3 select-none floating-anim">
+          <div class="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-300 shrink-0">
+            <i data-lucide="type" class="w-3.5 h-3.5"></i>
+            <span>페이지 번역 글꼴 크기</span>
+          </div>
+          <div class="flex items-center gap-2 flex-1 max-w-[230px]">
+            <button onclick="app.adjustPageTransFontSize(-1)" class="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-bold flex items-center justify-center">−</button>
+            <input id="page-trans-inline-slider" type="range" min="12" max="24" step="1" value="16" oninput="app.setPageTransFontSize(this.value)" class="moon-slider flex-1" />
+            <button onclick="app.adjustPageTransFontSize(1)" class="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-bold flex items-center justify-center">+</button>
+            <span id="page-trans-inline-val" class="text-xs font-mono font-bold text-zinc-700 dark:text-zinc-200 w-9 text-right">16px</span>
+          </div>
+          <button onclick="app.openSettingsModal('display')" class="text-[11px] text-zinc-400 hover:text-indigo-500 shrink-0" title="화면 설정 열기">설정</button>
+        </div>
+
+        <!-- FIRST-TIME CLEAN ONBOARDING LAUNCHPAD -->
+        <section id="empty-workspace-onboarding" class="max-w-2xl mx-auto my-8 sm:my-14 space-y-5 select-none">
+          <div id="onboarding-dropzone"
+               onclick="document.getElementById('pdf-upload-input').click()"
+               class="cursor-pointer rounded-3xl bg-white dark:bg-[#14141b] border-2 border-dashed border-zinc-300 dark:border-zinc-700/80 hover:border-indigo-500 dark:hover:border-indigo-500 p-8 sm:p-12 text-center space-y-4 transition shadow-sm">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center">
+              <i data-lucide="file-up" class="w-7 h-7"></i>
+            </div>
+            <div class="space-y-1.5">
+              <h2 class="text-lg sm:text-xl font-bold text-zinc-900 dark:text-white">읽고 싶은 논문 PDF를 이곳에 놓아주세요</h2>
+              <p class="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
+                파일을 드래그 앤 드롭하거나 클릭하여 업로드하면 목차·핵심 문장·키워드 사전이 자동 구성됩니다.
+              </p>
+            </div>
+            <div class="pt-1">
+              <span class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold shadow transition">
+                <i data-lucide="folder-open" class="w-4 h-4"></i>
+                <span>내 컴퓨터에서 PDF 선택</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Quick Action 1: Live Academic Search -->
+            <form onsubmit="app.handleQuickOnboardingSearch(event)" class="p-5 rounded-2xl bg-white dark:bg-[#14141b] border border-zinc-200 dark:border-zinc-800 space-y-3 shadow-sm">
+              <div class="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                <i data-lucide="compass" class="w-4 h-4"></i>
+                <span>실시간 학술 논문 검색 (OpenAlex)</span>
+              </div>
+              <p class="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                PDF 파일이 없어도 관심 연구 주제나 논문 제목을 검색해 즉시 리더기로 열람할 수 있습니다.
+              </p>
+              <div class="flex items-center gap-1.5">
+                <input id="onboarding-search-input" type="text" placeholder="연구 키워드 또는 논문 제목 입력..."
+                       class="flex-1 min-w-0 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-xs focus:outline-none focus:border-indigo-500" />
+                <button type="submit" class="px-3 py-2 rounded-lg bg-zinc-900 dark:bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shrink-0 transition">
+                  검색
+                </button>
+              </div>
+            </form>
+
+            <!-- Quick Action 2: Direct URL / arXiv Loader -->
+            <form onsubmit="app.handleQuickOnboardingUrl(event)" class="p-5 rounded-2xl bg-white dark:bg-[#14141b] border border-zinc-200 dark:border-zinc-800 space-y-3 shadow-sm">
+              <div class="flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                <i data-lucide="link" class="w-4 h-4"></i>
+                <span>arXiv ID 또는 PDF URL 바로 열기</span>
+              </div>
+              <p class="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                arXiv 주소나 웹상의 오픈액세스 PDF 링크를 입력하면 문서를 바로 불러옵니다.
+              </p>
+              <div class="flex items-center gap-1.5">
+                <input id="onboarding-url-input" type="text" placeholder="arXiv 주소 또는 PDF 링크 입력..."
+                       class="flex-1 min-w-0 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-xs focus:outline-none focus:border-emerald-500" />
+                <button type="submit" class="px-3 py-2 rounded-lg bg-zinc-900 dark:bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shrink-0 transition">
+                  열기
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div class="flex items-center justify-center gap-4 pt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <button onclick="app.openBrandStudioModal()" class="hover:text-indigo-500 flex items-center gap-1.5 transition">
+              <i data-lucide="user-cog" class="w-3.5 h-3.5"></i>
+              <span>내 프로필 및 워크스페이스 이름 설정</span>
+            </button>
+            <span>·</span>
+            <button onclick="app.openSettingsModal('general')" class="hover:text-indigo-500 flex items-center gap-1.5 transition">
+              <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+              <span>기본 설정 · 화면 · 프롬프트 개인화</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Uploaded Raw PDF.js Pages Wrapper -->
+        <div id="pdfjs-pages-wrapper" class="hidden w-fit max-w-full mx-auto space-y-6"></div>
+
+        <!-- Main Academic Paper Sheet (Hidden until paper opens) -->
+        <article id="paper-sheet" class="hidden moon-paper-sheet max-w-[760px] mx-auto rounded-sm min-h-[980px] px-12 sm:px-20 py-14 relative">
+        </article>
+
+        <!-- Bottom-Left Floating Pill (Hidden until paper opens) -->
+        <div id="original-pdf-pill" class="hidden sticky bottom-3 left-2 z-20 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/95 dark:bg-[#1a1a22]/95 border border-zinc-200/90 dark:border-zinc-700/80 shadow-lg text-xs font-medium text-zinc-700 dark:text-zinc-200 backdrop-blur-md select-none mt-4">
+          <button onclick="app.handleOriginalPdfToggle()" class="flex items-center gap-1.5 hover:text-indigo-500 transition">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+            <span id="original-pdf-pill-label">원본 PDF로 보기</span>
+          </button>
+          <span class="text-zinc-300 dark:text-zinc-700">|</span>
+          <button onclick="app.openPaperInfoModal()" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 px-1" title="서지 정보">
+            ···
+          </button>
+          <button onclick="document.getElementById('original-pdf-pill').classList.add('hidden')" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+      </main>
+
+      <!-- =====================================================================
+           3. RIGHT AI ASSISTANT PANEL + FAR-RIGHT ICON STRIP
+           ===================================================================== -->
+      <aside id="right-ai-container" class="h-full flex shrink-0 z-20 bg-white dark:bg-[#121216] border-l border-zinc-200 dark:border-[#24242c]">
+
+        <div id="right-ai-panel" class="w-[350px] lg:w-[385px] h-full flex flex-col justify-between overflow-hidden">
+
+          <!-- Scrollable Upper Sections -->
+          <div id="right-scroll-sections" class="flex-1 overflow-y-auto divide-y divide-zinc-200/80 dark:divide-[#24242c]">
+
+            <!-- SECTION 1: 키워드 사전 -->
+            <section class="p-4 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <button onclick="app.toggleAccordion('keywords')" class="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                  <i data-lucide="chevron-down" id="acc-icon-keywords" class="w-3.5 h-3.5 text-zinc-400 transition-transform"></i>
+                  <span>키워드 사전</span>
+                </button>
+                <div class="flex items-center gap-1 text-zinc-400">
+                  <button onclick="app.copySectionText('keywords')" class="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200" title="키워드 복사">
+                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button onclick="app.refreshSection('keywords')" class="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200" title="맞춤 프롬프트로 다시 생성">
+                    <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div id="acc-body-keywords" class="space-y-2">
+                <div id="keyword-pills-container" class="flex flex-wrap gap-1.5"></div>
+                <div id="keyword-detail-box" class="hidden p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-xs reader-scalable-text space-y-1 floating-anim"></div>
+                <div class="flex justify-end">
+                  <button id="btn-expand-keywords" onclick="app.toggleExpandKeywords()" class="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-[#1e1e26] hover:bg-zinc-200 dark:hover:bg-zinc-700 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 flex items-center gap-1 transition">
+                    <span id="label-expand-keywords">전체 보기</span>
+                    <i data-lucide="chevrons-up-down" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- SECTION 2: 3줄 요약 -->
+            <section class="p-4 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <button onclick="app.toggleAccordion('threeline')" class="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                  <i data-lucide="chevron-down" id="acc-icon-threeline" class="w-3.5 h-3.5 text-zinc-400 transition-transform"></i>
+                  <span>3줄 요약</span>
+                </button>
+                <div class="flex items-center gap-1 text-zinc-400">
+                  <button onclick="app.copySectionText('threeline')" class="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200" title="복사">
+                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button onclick="app.refreshSection('threeline')" class="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200" title="맞춤 프롬프트로 다시 생성">
+                    <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div id="acc-body-threeline" class="space-y-2">
+                <div id="threeline-list-container" class="text-xs reader-scalable-text leading-relaxed text-zinc-700 dark:text-zinc-300 space-y-2"></div>
+                <div class="flex justify-end">
+                  <button onclick="app.toggleExpandThreeLine()" class="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-[#1e1e26] hover:bg-zinc-200 dark:hover:bg-zinc-700 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 flex items-center gap-1 transition">
+                    <span id="label-expand-threeline">전체 보기</span>
+                    <i data-lucide="chevrons-up-down" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- SECTION 3: 요약 -->
+            <section class="p-4 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <button onclick="app.toggleAccordion('summary')" class="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                  <i data-lucide="chevron-down" id="acc-icon-summary" class="w-3.5 h-3.5 text-zinc-400 transition-transform"></i>
+                  <span>요약</span>
+                </button>
+                <div class="flex items-center gap-1 text-zinc-400">
+                  <button onclick="app.copySectionText('summary')" class="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200" title="복사">
+                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button onclick="app.refreshSection('summary')" class="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200" title="맞춤 프롬프트로 다시 생성">
+                    <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div id="acc-body-summary" class="space-y-2">
+                <div id="summary-text-container" class="text-xs reader-scalable-text leading-relaxed text-zinc-700 dark:text-zinc-300 ai-prose"></div>
+                <div class="flex justify-end">
+                  <button onclick="app.toggleExpandSummary()" class="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-[#1e1e26] hover:bg-zinc-200 dark:hover:bg-zinc-700 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 flex items-center gap-1 transition">
+                    <span id="label-expand-summary">전체 보기</span>
+                    <i data-lucide="chevrons-up-down" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- SECTION 4: 토론 (With AI Discussion) -->
+            <section id="discussion-section" class="p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <button onclick="app.toggleAccordion('discussion')" class="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                  <i data-lucide="chevron-down" id="acc-icon-discussion" class="w-3.5 h-3.5 text-zinc-400 transition-transform"></i>
+                  <span>토론</span>
+                </button>
+                <div class="flex items-center gap-1 text-zinc-400">
+                  <button onclick="app.clearCurrentDiscussion()" class="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200" title="대화 초기화">
+                    <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button onclick="app.startNewDiscussionThread()" class="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200" title="새로운 대화 시작">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div id="acc-body-discussion" class="space-y-3">
+                <div class="relative">
+                  <select id="discussion-thread-select" onchange="app.switchDiscussionThread(this.value)" class="w-full appearance-none rounded-lg bg-zinc-100 dark:bg-[#1a1a22] border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 focus:outline-none">
+                    <option value="default">💬 새로운 대화</option>
+                    <option value="thread-method">🔬 실험 방법론 및 아키텍처 심층 분석</option>
+                    <option value="thread-math">📐 핵심 수식 및 이론 검증 토론</option>
+                  </select>
+                  <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-2.5 pointer-events-none"></i>
+                </div>
+
+                <div id="discussion-messages-list" class="space-y-3 pt-1 reader-scalable-text"></div>
+              </div>
+            </section>
+
+          </div>
+
+          <!-- BOTTOM FIXED CHAT DOCK -->
+          <div class="p-3 border-t border-zinc-200 dark:border-[#24242c] bg-white dark:bg-[#121216] space-y-2.5 shrink-0">
+            <div id="bottom-prompt-chips" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar"></div>
+
+            <div id="chat-attachment-banner" class="hidden px-2.5 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-between gap-2 text-[11px]">
+              <span id="chat-attachment-label" class="text-indigo-600 dark:text-indigo-300 truncate font-medium"></span>
+              <button onclick="app.clearChatAttachment()" class="text-zinc-400 hover:text-zinc-600">
+                <i data-lucide="x" class="w-3 h-3"></i>
+              </button>
+            </div>
+
+            <div class="rounded-2xl bg-zinc-100/90 dark:bg-[#1b1b22] border border-zinc-200/90 dark:border-zinc-700/70 p-2.5 space-y-2 relative">
+              <div class="flex items-center gap-1.5">
+                <input id="chat-input" type="text" placeholder="무엇이든 질문하세요." class="flex-1 bg-transparent text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none px-1" onkeydown="if(event.key==='Enter') app.handleChatSubmit(event)" />
+
+                <div class="relative group">
+                  <button type="button" onclick="app.cycleRandomSuggestedPrompt()" class="w-6 h-6 rounded-full border border-zinc-300 dark:border-zinc-600 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white text-[11px] font-bold transition">
+                    ?
+                  </button>
+                  <div class="hidden group-hover:block absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-white dark:bg-zinc-100 text-zinc-900 text-[10px] font-bold shadow whitespace-nowrap z-30">
+                    추천 질문
+                  </div>
+                </div>
+
+                <button type="button" onclick="app.handleChatSubmit(event)" class="w-6 h-6 rounded-full bg-zinc-300 dark:bg-zinc-700 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-zinc-700 dark:text-zinc-200 hover:text-white flex items-center justify-center transition">
+                  <i data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+
+              <div class="flex items-center gap-1.5 pt-0.5 relative">
+                <!-- 1. 참고 논문 추가 Button + Popover -->
+                <div class="relative">
+                  <button type="button" id="chat-ref-paper-btn" onclick="app.toggleRefPaperPopover(event)" class="px-2.5 py-1 rounded-lg bg-white dark:bg-[#25252e] hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200/80 dark:border-zinc-700 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5 transition">
+                    <svg class="w-3.5 h-3.5 text-zinc-500 stroke-current fill-none stroke-2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                    </svg>
+                    <span id="chat-ref-paper-label">참고 논문 추가</span>
+                  </button>
+
+                  <!-- Popover: 참고 논문 추가 (Image 1) -->
+                  <div id="popover-ref-paper" onclick="event.stopPropagation()" class="hidden absolute bottom-full mb-2 left-0 w-[290px] sm:w-[310px] rounded-2xl bg-white dark:bg-[#1a1a22] border border-zinc-200 dark:border-zinc-700 shadow-2xl p-3 z-40 select-none animate-in fade-in duration-150">
+                    <!-- Top Search -->
+                    <div class="relative mb-2.5">
+                      <svg class="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 stroke-current fill-none stroke-2" viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                      </svg>
+                      <input id="ref-paper-search-input" type="text" placeholder="Search papers ..." oninput="app.filterRefPaperList(this.value)"
+                             class="w-full pl-8 pr-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-transparent text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-indigo-500" />
+                    </div>
+
+                    <!-- Segmented Tabs: 전체 | 폴더 -->
+                    <div class="flex items-center p-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs font-medium mb-3">
+                      <button id="ref-tab-all" type="button" onclick="app.setRefPaperTab('all')"
+                              class="flex-1 py-1 text-center rounded-md bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-semibold transition">
+                        전체
+                      </button>
+                      <button id="ref-tab-folder" type="button" onclick="app.setRefPaperTab('folder')"
+                              class="flex-1 py-1 text-center rounded-md text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition">
+                        폴더
+                      </button>
+                    </div>
+
+                    <!-- Dynamic Body Content -->
+                    <div id="ref-paper-body" class="min-h-[160px] max-h-[220px] overflow-y-auto flex flex-col justify-center">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 2. AI Model Selector Button + Popover (Image 2) -->
+                <button type="button" id="chat-model-pill" onclick="app.toggleChatModelPopover(event)" class="px-2.5 py-1 rounded-lg bg-white dark:bg-[#25252e] hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200/80 dark:border-zinc-700 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 transition" title="클릭하여 AI 모델 선택">
+                    <span id="chat-model-name-label">Gemini 3.1 Flash Lite</span>
+                  </button>
+
+                <!-- Popover: AI Model Selector (Image 2) -->
+                  <div id="popover-chat-model" onclick="event.stopPropagation()" class="hidden absolute bottom-full mb-2 right-0 w-[270px] sm:w-[275px] rounded-2xl bg-white dark:bg-[#1a1a22] border border-zinc-200 dark:border-zinc-700 shadow-2xl p-2.5 z-40 select-none animate-in fade-in duration-150">
+                  <div id="chat-model-list" class="space-y-0.5 max-h-[380px] overflow-y-auto text-xs">
+                    </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3B. FAR-RIGHT VERTICAL ICON RAIL -->
+        <div class="w-11 h-full border-l border-zinc-200 dark:border-[#24242c] bg-white dark:bg-[#121216] flex flex-col items-center py-3 gap-2.5 select-none shrink-0">
+          <button onclick="app.toggleOutlineDrawer()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="목차 (Outline)">
+            <i data-lucide="list" class="w-4 h-4"></i>
+          </button>
+
+          <button id="rail-btn-ai" onclick="app.focusRightSection('keywords')" class="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm transition" title="With AI (키워드 & 요약)">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+          </button>
+
+          <button onclick="app.focusRightSection('discussion')" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="토론 및 AI 대화">
+            <i data-lucide="message-square" class="w-4 h-4"></i>
+          </button>
+
+          <button onclick="app.openMyActivityModal()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="My Activity (하이라이트·주석·설명 활동 타임라인)">
+            <i data-lucide="pen-tool" class="w-4 h-4"></i>
+          </button>
+
+          <button onclick="app.activateRegionCapture()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="바운딩 박스 영역 캡처 (그림·표·수식 비전 설명)">
+            <i data-lucide="scan" class="w-4 h-4"></i>
+          </button>
+
+          <button onclick="app.generatePaperInfographic()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="AI 인포그래픽 다이어그램 생성">
+            <i data-lucide="network" class="w-4 h-4"></i>
+          </button>
+
+          <button onclick="app.openCitationsModal()" class="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="스마트 인용 & 참고문헌 목록">
+            <i data-lucide="bookmark" class="w-4 h-4"></i>
+          </button>
+
+          <button onclick="app.toggleRightAiPanel()" class="p-1.5 rounded-lg border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition mt-1" title="우측 AI 패널 접기/펼치기">
+            <i data-lucide="panel-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+      </aside>
+    </div>
+  </div>
+
+  
+
+  <!-- =====================================================================
+       MOONLIGHT TEXT SELECTION AI PALETTE (설명, 인포그래픽, 하이라이트 5색, 번역, 주석, AI질문)
+       ===================================================================== -->
+  <div id="selection-toolbar" class="hidden fixed z-50 floating-anim bg-white dark:bg-[#181822] border border-zinc-200 dark:border-zinc-700/80 rounded-2xl shadow-2xl p-1.5 w-[270px] select-none text-[13px] text-zinc-800 dark:text-zinc-200" onclick="event.stopPropagation()">
+    
+    <!-- 1. 설명 (Shortcut: E) -->
+    <div onclick="app.triggerSelectionAction('explain')"
+         class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer transition group">
+      <div class="flex items-center gap-2.5">
+        <svg class="w-4 h-4 text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition stroke-current fill-none stroke-2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+        </svg>
+        <span class="font-normal text-zinc-800 dark:text-zinc-200">설명</span>
+      </div>
+      <kbd class="min-w-[20px] text-center px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">E</kbd>
+    </div>
+
+    <!-- 2. 인포그래픽 (Shortcut: I, Hover Preview Flyout) -->
+    <div class="relative"
+         onmouseenter="app.showInfographicPreview(true)"
+         onmouseleave="app.showInfographicPreview(false)"
+         onclick="app.generateInfographicFromSelection()">
+      <div class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer transition group">
+        <div class="flex items-center gap-2.5">
+          <svg class="w-4 h-4 text-zinc-500 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition stroke-current fill-none stroke-2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/>
+            <path d="M5 19l1 3 3-1-3-1zM19 15l1 3 3-1-3-1z"/>
+          </svg>
+          <span class="font-normal text-zinc-800 dark:text-zinc-200">인포그래픽</span>
+        </div>
+        <kbd class="min-w-[20px] text-center px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">I</kbd>
+      </div>
+
+      <!-- Infographic Hover Preview Flyout Card matching Screenshot 2 -->
+      <div id="infographic-preview-flyout" class="hidden absolute left-[calc(100%+10px)] top-0 z-50 w-[295px] p-4 rounded-2xl bg-white dark:bg-[#181822] border border-zinc-200 dark:border-zinc-700/80 shadow-2xl space-y-3 pointer-events-none floating-anim select-none">
+        <span class="inline-block px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-medium">미리보기</span>
+        <h4 class="font-bold text-[13.5px] text-zinc-900 dark:text-white leading-tight">선택한 텍스트 → 시각 요약</h4>
+
+        <div class="flex items-center gap-2 p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800">
+          <div class="flex-1 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-[#1a1a24] space-y-1.5 shadow-sm">
+            <span class="text-[9.5px] font-semibold text-zinc-400 block">선택한 텍스트</span>
+            <div class="space-y-1 py-0.5">
+              <div class="h-1.5 w-14 bg-zinc-200 dark:bg-zinc-700 rounded-full"></div>
+              <div class="h-1.5 w-10 bg-zinc-200 dark:bg-zinc-700 rounded-full"></div>
+              <div class="h-1.5 w-7 bg-zinc-200 dark:bg-zinc-700 rounded-full"></div>
+            </div>
+          </div>
+
+          <div class="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 flex items-center justify-center shrink-0 text-xs">
+            →
+          </div>
+
+          <div class="flex-1 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-[#1a1a24] space-y-1.5 shadow-sm">
+            <span class="text-[9.5px] font-semibold text-zinc-400 block">생성된 시각 자료</span>
+            <div class="flex items-center gap-1">
+              <span class="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[9px] text-zinc-600 dark:text-zinc-300 font-medium">방법</span>
+              <span class="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[9px] text-zinc-600 dark:text-zinc-300 font-medium">결과</span>
+            </div>
+            <div class="py-0.5 px-1.5 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 text-center">
+              핵심 요약
+            </div>
+          </div>
+        </div>
+
+        <p class="text-[11px] text-zinc-400 dark:text-zinc-500 leading-normal">
+          선택한 내용을 바탕으로 Moonlight가 새 이미지를 만들어요.
+        </p>
+      </div>
+    </div>
+
+    <!-- 3. 하이라이트 (Shortcut: H, Expandable 5 Color Dots on Hover matching Screenshot 1) -->
+    <div class="relative group"
+         onmouseenter="app.showHighlightColors(true)"
+         onmouseleave="app.showHighlightColors(false)">
+      <div onclick="app.applyHighlightWithColor(app.currentHighlightColor || 'pink', event)"
+           class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer transition">
+        <div class="flex items-center gap-2 min-w-0">
+          <svg class="w-4 h-4 text-zinc-500 group-hover:text-amber-500 transition stroke-current fill-none stroke-2 shrink-0" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          <span class="font-normal text-zinc-800 dark:text-zinc-200 shrink-0">하이라이트</span>
+
+          <!-- Single Active Color Dot (Unhovered State) -->
+          <span id="highlight-active-dot" class="w-3.5 h-3.5 rounded-full bg-[#f472b6] shadow-sm inline-block shrink-0"></span>
+
+          <!-- 5 Expandable Color Dots (Hover State matching Screenshot 1) -->
+          <div id="highlight-color-picker" class="hidden items-center gap-1.5 shrink-0 pl-0.5" onclick="event.stopPropagation()">
+            <!-- 1. Pink -->
+            <button type="button" onclick="app.applyHighlightWithColor('pink', event)"
+                    class="w-3.5 h-3.5 rounded-full bg-[#f472b6] hover:scale-125 transition-transform shadow-sm focus:outline-none" title="분홍"></button>
+            <!-- 2. Yellow -->
+            <button type="button" onclick="app.applyHighlightWithColor('yellow', event)"
+                    class="w-3.5 h-3.5 rounded-full bg-[#fef08a] hover:scale-125 transition-transform shadow-sm border border-amber-300/60 focus:outline-none" title="노랑"></button>
+            <!-- 3. Green -->
+            <button type="button" onclick="app.applyHighlightWithColor('green', event)"
+                    class="w-3.5 h-3.5 rounded-full bg-[#bbf7d0] hover:scale-125 transition-transform shadow-sm border border-emerald-300/60 focus:outline-none" title="초록"></button>
+            <!-- 4. Cyan -->
+            <button type="button" onclick="app.applyHighlightWithColor('cyan', event)"
+                    class="w-3.5 h-3.5 rounded-full bg-[#bae6fd] hover:scale-125 transition-transform shadow-sm border border-sky-300/60 focus:outline-none" title="하늘"></button>
+            <!-- 5. Coral -->
+            <button type="button" onclick="app.applyHighlightWithColor('coral', event)"
+                    class="w-3.5 h-3.5 rounded-full bg-[#fecaca] hover:scale-125 transition-transform shadow-sm border border-rose-300/60 focus:outline-none" title="산호"></button>
+          </div>
+        </div>
+
+        <kbd class="min-w-[20px] text-center px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">H</kbd>
+      </div>
+    </div>
+
+    <!-- 4. 번역 (Shortcut: T) -->
+    <div onclick="app.triggerSelectionAction('translate')"
+         class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer transition group">
+      <div class="flex items-center gap-2.5">
+        <svg class="w-4 h-4 text-zinc-500 group-hover:text-blue-500 transition stroke-current fill-none stroke-2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+        <span class="font-normal text-zinc-800 dark:text-zinc-200">번역</span>
+      </div>
+      <kbd class="min-w-[20px] text-center px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">T</kbd>
+    </div>
+
+    <!-- 5. 주석 (Shortcut: C) -->
+    <div onclick="app.addCommentToSelection()"
+         class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer transition group">
+      <div class="flex items-center gap-2.5">
+        <svg class="w-4 h-4 text-zinc-500 group-hover:text-emerald-500 transition stroke-current fill-none stroke-2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          <line x1="9" y1="9" x2="15" y2="9"/>
+          <line x1="9" y1="13" x2="13" y2="13"/>
+        </svg>
+        <span class="font-normal text-zinc-800 dark:text-zinc-200">주석</span>
+      </div>
+      <kbd class="min-w-[20px] text-center px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">C</kbd>
+    </div>
+
+    <!-- 6. AI에게 질문 (Shortcut: Enter) -->
+    <div onclick="app.askChatWithSelection()"
+         class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer transition group">
+      <div class="flex items-center gap-2.5">
+        <svg class="w-4 h-4 text-zinc-500 group-hover:text-indigo-600 transition stroke-current fill-none stroke-2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+          <line x1="12" y1="8" x2="12" y2="14"/>
+          <line x1="9" y1="11" x2="15" y2="11"/>
+        </svg>
+        <span class="font-normal text-zinc-800 dark:text-zinc-200">AI에게 질문</span>
+      </div>
+      <kbd class="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">Enter</kbd>
+    </div>
+
+  </div>
+
+  <!-- =====================================================================
+       FLOATING AI RESULT CARD
+       ===================================================================== -->
+  <div id="floating-ai-card" class="hidden fixed z-50 bottom-6 left-1/2 -translate-x-1/2 w-[92vw] max-w-xl bg-white dark:bg-[#181820] border border-indigo-500/40 rounded-2xl shadow-2xl overflow-hidden floating-anim">
+    <div class="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between">
+      <div class="flex items-center gap-2 text-xs font-bold">
+        <i data-lucide="sparkles" class="w-4 h-4"></i>
+        <span id="floating-card-title">AI 즉시 분석</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button onclick="app.continueFloatingCardInChat()" class="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-[11px] font-medium transition">
+          토론 창으로 보내기
+        </button>
+        <button onclick="app.closeFloatingCard()" class="p-1 rounded hover:bg-white/20 transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+    <div id="floating-card-body" class="p-4 max-h-80 overflow-y-auto text-xs sm:text-sm reader-scalable-text leading-relaxed ai-prose text-zinc-800 dark:text-zinc-200"></div>
+  </div>
+
+  <!-- =====================================================================
+       UNIVERSAL MODAL (Explore / Infographic / Region Capture / Activity / Brand Studio)
+       ===================================================================== -->
+  <div id="universal-modal" class="hidden fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this) app.closeUniversalModal()">
+    <div class="bg-white dark:bg-[#16161d] border border-zinc-200 dark:border-zinc-700/80 rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl floating-anim">
+      <div class="px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-[#1c1c24]">
+        <div class="flex items-center gap-2">
+          <span id="umodal-badge" class="px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-xs font-bold">Studio</span>
+          <h3 id="umodal-title" class="font-bold text-sm sm:text-base">모달 제목</h3>
+        </div>
+        <button onclick="app.closeUniversalModal()" class="p-1 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div id="umodal-body" class="p-5 space-y-4 max-h-[80vh] overflow-y-auto text-xs sm:text-sm"></div>
+    </div>
+  </div>
+
+  
+
+  <!-- =====================================================================
+       MOONLIGHT FILE INFO MODAL (파일 정보 / 문서 속성 대화상자)
+       ===================================================================== -->
+  <div id="file-info-modal" class="hidden fixed inset-0 z-50 bg-black/45 backdrop-blur-[1px] flex items-center justify-center p-3" onclick="if(event.target===this) app.closeFileInfoModal()">
+    <div class="bg-white dark:bg-[#1a1a22] border border-zinc-400 dark:border-zinc-600 rounded-[3px] shadow-2xl w-full max-w-[420px] p-3.5 space-y-2 select-text font-sans text-[11.5px] sm:text-[12px] leading-tight text-black dark:text-zinc-100" onclick="event.stopPropagation()">
+      
+      <!-- Section 1: File Name & Size -->
+      <table class="w-full border-collapse">
+        <tbody>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">파일 이름:</td>
+            <td id="fileinfo-filename" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top break-words"></td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">파일 크기:</td>
+            <td id="fileinfo-filesize" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Divider 1 -->
+      <div class="h-[1px] bg-zinc-300 dark:bg-zinc-700 my-1"></div>
+
+      <!-- Section 2: Metadata (Title, Author, Subject, Keywords, Dates, Creator) -->
+      <table class="w-full border-collapse">
+        <tbody>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">제목:</td>
+            <td id="fileinfo-title" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top break-words"></td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">작성자:</td>
+            <td id="fileinfo-author" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top break-words"></td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">주제:</td>
+            <td id="fileinfo-subject" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top">-</td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">키워드:</td>
+            <td id="fileinfo-keywords" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top">-</td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">작성 날짜:</td>
+            <td id="fileinfo-creationdate" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top">-</td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">수정 날짜:</td>
+            <td id="fileinfo-moddate" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top">-</td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">작성 프로그램:</td>
+            <td id="fileinfo-creator" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top break-words">arXiv GenPDF (tex2pdf:)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Divider 2 -->
+      <div class="h-[1px] bg-zinc-300 dark:bg-zinc-700 my-1"></div>
+
+      <!-- Section 3: PDF Tech Specs (Producer, Version, Pages, Page Size) -->
+      <table class="w-full border-collapse">
+        <tbody>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">PDF 변환 소프트웨어:</td>
+            <td id="fileinfo-producer" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top break-words">pikepdf 8.15.1</td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">PDF 버전:</td>
+            <td id="fileinfo-pdfversion" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top">1.5</td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">페이지 수:</td>
+            <td id="fileinfo-pagecount" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top">10</td>
+          </tr>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">페이지 크기:</td>
+            <td id="fileinfo-pagesize" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top">215.9 × 279.4 mm (레터, 세로 방향)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Divider 3 -->
+      <div class="h-[1px] bg-zinc-300 dark:bg-zinc-700 my-1"></div>
+
+      <!-- Section 4: Fast Web View -->
+      <table class="w-full border-collapse">
+        <tbody>
+          <tr>
+            <td class="w-[140px] py-[2px] text-zinc-900 dark:text-zinc-200 align-top whitespace-nowrap">빠른 웹 보기:</td>
+            <td id="fileinfo-linearized" class="py-[2px] text-zinc-900 dark:text-zinc-100 align-top">아니요</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Centered Close Button matching screenshot -->
+      <div class="flex justify-center pt-2">
+        <button type="button" onclick="app.closeFileInfoModal()"
+                class="min-w-[62px] px-3.5 py-1 rounded-[3px] bg-[#e6e6ea] dark:bg-zinc-700 hover:bg-[#dcdce2] dark:hover:bg-zinc-600 text-zinc-900 dark:text-zinc-100 text-[11.5px] font-normal transition shadow-sm border border-zinc-300 dark:border-zinc-600 select-none">
+          닫기
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  
+
+  <!-- =====================================================================
+       MOONLIGHT 3-TAB SETTINGS MODAL (기본 설정 · 화면 설정 · 프롬프트 개인화)
+       ===================================================================== -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm overflow-y-auto overflow-x-hidden flex p-3 sm:p-6" onclick="if(event.target===this) app.closeSettingsModal()">
+    <div class="bg-white dark:bg-[#16161d] border border-zinc-200 dark:border-zinc-700/90 rounded-2xl w-full max-w-[920px] h-[660px] max-h-[calc(100vh-2.5rem)] m-auto flex flex-col overflow-hidden shadow-2xl floating-anim select-none" onclick="event.stopPropagation()">
+
+      <!-- Modal Top Header -->
+      <div class="px-6 sm:px-7 pt-6 pb-4 flex items-center justify-between shrink-0">
+        <h2 class="text-[20px] font-bold tracking-tight text-zinc-900 dark:text-white">설정</h2>
+        <button onclick="app.closeSettingsModal()" class="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="닫기">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Two-Column Settings Layout -->
+      <div class="flex-1 flex flex-col sm:flex-row min-h-0 overflow-hidden">
+
+        <!-- Left Tab Navigation Sidebar -->
+        <nav class="w-full sm:w-[215px] shrink-0 px-3.5 pb-3 sm:pb-6 sm:border-r border-b sm:border-b-0 border-zinc-200 dark:border-zinc-800 flex sm:flex-col gap-1.5 overflow-x-auto">
+          <button id="settings-tab-btn-general" onclick="app.switchSettingsTab('general')"
+                  class="px-3.5 py-2.5 rounded-xl text-left text-[14px] font-semibold border-[1.5px] border-zinc-900 dark:border-white text-zinc-900 dark:text-white transition whitespace-nowrap">
+            기본 설정
+          </button>
+          <button id="settings-tab-btn-display" onclick="app.switchSettingsTab('display')"
+                  class="px-3.5 py-2.5 rounded-xl text-left text-[14px] font-normal border-[1.5px] border-transparent text-zinc-400 dark:text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition whitespace-nowrap">
+            화면 설정
+          </button>
+          <button id="settings-tab-btn-prompts" onclick="app.switchSettingsTab('prompts')"
+                  class="px-3.5 py-2.5 rounded-xl text-left text-[14px] font-normal border-[1.5px] border-transparent text-zinc-400 dark:text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition whitespace-nowrap">
+            프롬프트 개인화
+          </button>
+        </nav>
+
+        <!-- Right Settings Content Area -->
+        <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+
+          <!-- ===============================================================
+               TAB 1: 기본 설정
+               =============================================================== -->
+          <div id="settings-panel-general" class="flex-1 overflow-y-auto px-6 sm:px-9 py-3 pb-10 space-y-9">
+
+            <!-- 1. PDF를 문라이트로 자동 열기 -->
+            <div class="flex items-start gap-3.5">
+              <div class="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-800 dark:text-zinc-200 shrink-0 mt-0.5">
+                <i data-lucide="file-text" class="w-[18px] h-[18px]"></i>
+              </div>
+              <div class="flex-1 space-y-3">
+                <div class="flex items-center justify-between gap-4">
+                  <div class="text-[16px] font-bold text-zinc-900 dark:text-white">PDF를 문라이트로 자동 열기</div>
+                  <button id="set-auto-open-btn" type="button" onclick="app.toggleSettingAutoOpenPdf()"
+                          class="w-11 h-6 rounded-full bg-zinc-300 dark:bg-zinc-700 relative transition-colors flex items-center px-0.5 shrink-0">
+                    <span id="set-auto-open-knob" class="w-5 h-5 rounded-full bg-white shadow transition-transform translate-x-0"></span>
+                  </button>
+                </div>
+                <p class="text-[13.5px] text-zinc-500 dark:text-zinc-400">다음에 여는 PDF부터 적용돼요.</p>
+
+                <!-- 적용 기간 Divider -->
+                <div class="flex items-center gap-3 pt-1">
+                  <span class="text-xs text-zinc-400 dark:text-zinc-500 font-medium">적용 기간</span>
+                  <div class="flex-1 h-[1px] bg-zinc-100 dark:bg-zinc-800"></div>
+                </div>
+
+                <!-- Radio Options -->
+                <div id="set-auto-open-period-group" class="space-y-3.5 pt-0.5 transition-opacity">
+                  <div onclick="app.setSettingAutoOpenPeriod('session')" class="flex items-start gap-3 cursor-pointer group">
+                    <span id="radio-period-session" class="mt-0.5 w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0">
+                      <span class="w-2 h-2 rounded-full"></span>
+                    </span>
+                    <div class="space-y-0.5">
+                      <div class="text-[13.5px] font-semibold text-zinc-700 dark:text-zinc-200">지금 읽는 동안만</div>
+                      <div class="text-[12.5px] text-zinc-400 dark:text-zinc-500">브라우저를 끄기 전까지 모든 PDF를 문라이트로 열어요.</div>
+                    </div>
+                  </div>
+
+                  <div onclick="app.setSettingAutoOpenPeriod('always')" class="flex items-start gap-3 cursor-pointer group">
+                    <span id="radio-period-always" class="mt-0.5 w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0">
+                      <span class="w-2 h-2 rounded-full"></span>
+                    </span>
+                    <div class="space-y-0.5">
+                      <div class="text-[13.5px] font-semibold text-zinc-700 dark:text-zinc-200">앞으로 계속</div>
+                      <div class="text-[12.5px] text-zinc-400 dark:text-zinc-500">직접 끄기 전까지 모든 PDF를 문라이트로 열어요.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. 언어 -->
+            <div class="flex items-start gap-3.5">
+              <div class="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-500/15 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5">
+                <i data-lucide="languages" class="w-[18px] h-[18px]"></i>
+              </div>
+              <div class="flex-1 space-y-3">
+                <div class="space-y-1">
+                  <div class="text-[16px] font-bold text-zinc-900 dark:text-white">언어</div>
+                  <p class="text-[13.5px] text-zinc-500 dark:text-zinc-400">선호하는 언어를 선택하세요.</p>
+                </div>
+
+                <div class="relative">
+                  <select id="set-language-select" onchange="app.changeSettingLanguage(this.value)"
+                          class="w-full appearance-none rounded-xl bg-white dark:bg-[#1d1d26] border border-zinc-200 dark:border-zinc-700 px-4 py-3 text-[14px] font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec] cursor-pointer">
+                    <option value="ko">한국어 (Korean)</option>
+                    <option value="en">영어 (English)</option>
+                    <option value="ja">일본어 (Japanese)</option>
+                    <option value="zh-CN">중국어 간체 (Chinese Simplified)</option>
+                    <option value="zh-TW">중국어 번체 (Chinese Traditional)</option>
+                    <option value="es">스페인어 (Spanish)</option>
+                    <option value="de">독일어 (German)</option>
+                    <option value="fr">프랑스어 (French)</option>
+                  </select>
+                  <i data-lucide="chevron-down" class="w-4 h-4 text-zinc-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. AI 모델 -->
+            <div class="flex items-start gap-3.5">
+              <div class="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-500/15 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0 mt-0.5">
+                <i data-lucide="lightbulb" class="w-[18px] h-[18px]"></i>
+              </div>
+              <div class="flex-1 space-y-3">
+                <div class="space-y-1">
+                  <div class="text-[16px] font-bold text-zinc-900 dark:text-white">주 AI 모델 (기본 엔진)</div>
+                  <p class="text-[13.5px] text-zinc-500 dark:text-zinc-400">API 키를 등록했을 때 기본 연구 및 질의응답에 사용할 주 AI 모델을 설정합니다. (Google Gemini · OpenAI · Anthropic Claude)</p>
+                </div>
+
+                <div class="relative">
+                  <span class="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 pointer-events-none text-sm">✦</span>
+                  <select id="set-ai-model-select" onchange="app.changeSettingAiModel(this.value)"
+                          class="w-full appearance-none rounded-xl bg-white dark:bg-[#1d1d26] border border-zinc-200 dark:border-zinc-700 pl-9 pr-10 py-3 text-[14px] font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec] cursor-pointer">
+                    <optgroup label="Google Gemini">
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash (초고속 멀티모달)</option>
+                      <option value="gemini-2.5-pro">Gemini 2.5 Pro (고성능 심층 추론)</option>
+                      <option value="gemini-2.0-flash">Gemini 2.0 Flash (차세대 멀티모달)</option>
+                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (200만 토큰 컨텍스트)</option>
+                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (경량 고속)</option>
+                      <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (빠른 연구 보조)</option>
+                      <option value="gemini-3-flash">Gemini 3 Flash</option>
+                      <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+                      <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
+                    </optgroup>
+                    <optgroup label="OpenAI (GPT)">
+                      <option value="gpt-4o">GPT-4o (옴니모달 플래그십)</option>
+                      <option value="gpt-4o-mini">GPT-4o mini (초고속 경량)</option>
+                      <option value="o1">o1 (심층 과학/수학 추론)</option>
+                      <option value="o1-mini">o1-mini (STEM 고속 추론)</option>
+                      <option value="o3-mini">o3-mini (차세대 고성능 추론)</option>
+                      <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                      <option value="gpt-5-nano">GPT-5 nano</option>
+                      <option value="gpt-6-luna">GPT-6 Luna</option>
+                      <option value="gpt-6.1-sol">GPT-6.1 Sol</option>
+                    </optgroup>
+                    <optgroup label="Anthropic (Claude)">
+                      <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (하이브리드 추론)</option>
+                      <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (최상위 학술 분석)</option>
+                      <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (초고속 요약)</option>
+                      <option value="claude-3-opus-20240229">Claude 3 Opus (복합 맥락 심층 해석)</option>
+                      <option value="claude-sonnet-5">Claude Sonnet 5</option>
+                      <option value="claude-opus-5.5">Claude Opus 5.5</option>
+                    </optgroup>
+                  </select>
+                  <i data-lucide="chevron-down" class="w-4 h-4 text-zinc-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                </div>
+
+                <!-- Provider API Key Management Box -->
+                <div class="pt-2">
+                  <details id="details-api-keys" class="group rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/70 dark:bg-[#1b1b23] px-3.5 py-2.5 text-xs">
+                    <summary class="cursor-pointer font-semibold text-zinc-600 dark:text-zinc-300 hover:text-indigo-500 flex items-center justify-between list-none">
+                      <span class="flex items-center gap-1.5">
+                        <i data-lucide="key-round" class="w-3.5 h-3.5 text-indigo-500"></i>
+                        <span>AI API 키 연결 및 관리 (Google · OpenAI · Claude)</span>
+                      </span>
+                      <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform group-open:rotate-180"></i>
+                    </summary>
+                    <div class="pt-3.5 space-y-3">
+                      <!-- 1. Google Gemini Key -->
+                      <div class="space-y-1">
+                        <div class="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                          <span>Google Gemini API 키</span>
+                          <span class="text-[10px] text-emerald-500">Gemini 모델군 활성화</span>
+                        </div>
+                        <input id="modal-gemini-key" type="password" placeholder="AIzaSy..."
+                               class="w-full rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec]" />
+                      </div>
+
+                      <!-- 2. OpenAI Key -->
+                      <div class="space-y-1">
+                        <div class="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                          <span>OpenAI API 키</span>
+                          <span class="text-[10px] text-emerald-500">GPT 모델군 활성화</span>
+                        </div>
+                        <input id="modal-openai-key" type="password" placeholder="sk-proj-..."
+                               class="w-full rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec]" />
+                      </div>
+
+                      <!-- 3. Anthropic Claude Key -->
+                      <div class="space-y-1">
+                        <div class="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                          <span>Anthropic Claude API 키</span>
+                          <span class="text-[10px] text-emerald-500">Claude 모델군 활성화</span>
+                        </div>
+                        <input id="modal-claude-key" type="password" placeholder="sk-ant-..."
+                               class="w-full rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec]" />
+                      </div>
+
+                      <div class="pt-1 flex justify-end">
+                        <button type="button" onclick="app.saveAllApiSettings()" class="px-4 py-2 rounded-lg bg-[#5850ec] hover:bg-indigo-500 text-white text-xs font-bold transition">
+                          API 키 모두 저장
+                        </button>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ===============================================================
+               TAB 2: 화면 설정
+               =============================================================== -->
+          <div id="settings-panel-display" class="hidden flex-1 overflow-y-auto px-6 sm:px-9 py-3 pb-10 space-y-9">
+
+            <!-- 1. 라이트 모드 -->
+            <div class="flex items-start gap-3.5">
+              <div class="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 shrink-0 mt-0.5">
+                <i data-lucide="sun" class="w-[18px] h-[18px]"></i>
+              </div>
+              <div class="flex-1 space-y-1">
+                <div class="flex items-center justify-between gap-4">
+                  <div class="text-[16px] font-bold text-zinc-900 dark:text-white">라이트 모드</div>
+                  <button id="set-light-mode-btn" type="button" onclick="app.toggleTheme()"
+                          class="w-11 h-6 rounded-full bg-zinc-300 dark:bg-zinc-700 relative transition-colors flex items-center px-0.5 shrink-0">
+                    <span id="set-light-mode-knob" class="w-5 h-5 rounded-full bg-white shadow transition-transform translate-x-0"></span>
+                  </button>
+                </div>
+                <p class="text-[13.5px] text-zinc-500 dark:text-zinc-400">인터페이스를 라이트 또는 다크 모드로 전환합니다.</p>
+              </div>
+            </div>
+
+            <!-- 2. 글꼴 크기 -->
+            <div class="flex items-start gap-3.5">
+              <div class="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 shrink-0 mt-0.5 font-mono text-xs font-bold tracking-tighter">
+                FF
+              </div>
+              <div class="flex-1 space-y-4">
+                <div class="space-y-1">
+                  <div class="text-[16px] font-bold text-zinc-900 dark:text-white">글꼴 크기</div>
+                  <p class="text-[13.5px] text-zinc-500 dark:text-zinc-400">가독성을 높이기 위해 글꼴 크기를 조절하세요.</p>
+                </div>
+
+                <!-- Slider Row -->
+                <div class="flex items-center gap-4">
+                  <span id="set-fontsize-value" class="text-[14px] font-medium text-zinc-600 dark:text-zinc-300 w-10">16px</span>
+                  <input id="set-fontsize-slider" type="range" min="12" max="24" step="1" value="16"
+                         oninput="app.changeSettingFontSize(this.value)"
+                         class="moon-slider flex-1" />
+                </div>
+
+                <!-- Sub-card: 페이지 번역 별도 크기 -->
+                <div class="rounded-2xl border border-zinc-200 dark:border-zinc-700/80 bg-zinc-50/50 dark:bg-[#1b1b23] p-4 space-y-1.5">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="text-[14px] font-bold text-zinc-900 dark:text-white">페이지 번역 별도 크기</div>
+                    <button id="set-sep-pagetrans-btn" type="button" onclick="app.toggleSettingSeparatePageTransSize()"
+                            class="w-11 h-6 rounded-full bg-[#5850ec] relative transition-colors flex items-center px-0.5 shrink-0">
+                      <span id="set-sep-pagetrans-knob" class="w-5 h-5 rounded-full bg-white shadow transition-transform translate-x-5"></span>
+                    </button>
+                  </div>
+                  <p class="text-[13px] text-zinc-500 dark:text-zinc-400">페이지 번역에서 별도의 글꼴 크기를 사용합니다.</p>
+                  <p class="text-[12px] text-zinc-400 dark:text-zinc-500 pt-0.5">페이지 번역에 전용 글꼴 크기 컨트롤이 표시됩니다.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. 수학 구분 기호 -->
+            <div class="flex items-start gap-3.5">
+              <div class="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 shrink-0 mt-0.5 font-serif text-base font-bold">
+                ∃
+              </div>
+              <div class="flex-1 space-y-3.5">
+                <div class="space-y-1">
+                  <div class="text-[16px] font-bold text-zinc-900 dark:text-white">수학 구분 기호</div>
+                  <p class="text-[13.5px] text-zinc-500 dark:text-zinc-400">수식 복사에 사용될 구분 기호 형식을 선택하세요.</p>
+                </div>
+
+                <div class="space-y-2.5">
+                  <!-- Option: bracket -->
+                  <div onclick="app.setSettingMathDelimiter('bracket')" id="math-card-bracket"
+                       class="rounded-xl border border-zinc-200 dark:border-zinc-700 px-4 py-3 flex items-center justify-between cursor-pointer hover:border-[#5850ec] transition">
+                    <div class="flex items-center gap-3">
+                      <span id="math-radio-bracket" class="w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center">
+                        <span class="w-2.5 h-2.5 rounded-full"></span>
+                      </span>
+                      <span class="text-[14px] font-medium text-zinc-900 dark:text-zinc-100">bracket</span>
+                    </div>
+                    <code class="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono text-zinc-600 dark:text-zinc-300">\(, \), \[, \]</code>
+                  </div>
+
+                  <!-- Option: dollar -->
+                  <div onclick="app.setSettingMathDelimiter('dollar')" id="math-card-dollar"
+                       class="rounded-xl border border-zinc-200 dark:border-zinc-700 px-4 py-3 flex items-center justify-between cursor-pointer hover:border-[#5850ec] transition">
+                    <div class="flex items-center gap-3">
+                      <span id="math-radio-dollar" class="w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center">
+                        <span class="w-2.5 h-2.5 rounded-full"></span>
+                      </span>
+                      <span class="text-[14px] font-medium text-zinc-900 dark:text-zinc-100">dollar</span>
+                    </div>
+                    <code class="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono text-zinc-600 dark:text-zinc-300">$, $$</code>
+                  </div>
+
+                  <!-- Option: none -->
+                  <div onclick="app.setSettingMathDelimiter('none')" id="math-card-none"
+                       class="rounded-xl border border-zinc-200 dark:border-zinc-700 px-4 py-3 flex items-center justify-between cursor-pointer hover:border-[#5850ec] transition">
+                    <div class="flex items-center gap-3">
+                      <span id="math-radio-none" class="w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center">
+                        <span class="w-2.5 h-2.5 rounded-full"></span>
+                      </span>
+                      <span class="text-[14px] font-medium text-zinc-900 dark:text-zinc-100">none</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ===============================================================
+               TAB 3: 프롬프트 개인화
+               =============================================================== -->
+          <div id="settings-panel-prompts" class="hidden flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div class="flex-1 overflow-y-auto px-6 sm:px-9 py-2 pb-8 space-y-6">
+              <p class="text-[13.5px] text-zinc-400 dark:text-zinc-400">
+                말투부터 배경지식·전문성·관심사까지, AI가 나에게 맞춰 답하도록 지시할 수 있어요
+              </p>
+
+              <!-- 1. 시스템 프롬프트 (전체) -->
+              <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <label for="prompt-system-input" class="text-[15px] font-bold text-zinc-900 dark:text-white">시스템 프롬프트</label>
+                  <span class="px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 text-xs font-semibold">전체</span>
+                </div>
+                <textarea id="prompt-system-input" rows="3" oninput="app.markPromptSettingsDirty()"
+                          placeholder="AI를 공부하는 컴퓨터공학과 학생입니다. 이론과 실제 구현을 함께 살피며 논문을 읽을 수 있도록 도와주세요"
+                          class="w-full rounded-2xl bg-white dark:bg-[#1b1b23] border border-zinc-200 dark:border-zinc-700 px-4 py-3 text-[13.5px] text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-[#5850ec] resize-none leading-relaxed select-text"></textarea>
+              </div>
+
+              <!-- 2. 설명 기능 프롬프트 (수식, 그림(figure), 문단, 문장) -->
+              <div class="space-y-2">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <label for="prompt-explain-input" onclick="app.selectExplainPromptScope('all')" class="text-[15px] font-bold text-zinc-900 dark:text-white cursor-pointer">설명 기능 프롬프트</label>
+                  <button type="button" id="explain-chip-formula" onclick="app.selectExplainPromptScope('formula')"
+                          class="px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-medium hover:bg-indigo-500/15 transition">
+                    수식
+                  </button>
+                  <button type="button" id="explain-chip-figure" onclick="app.selectExplainPromptScope('figure')"
+                          class="px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-medium hover:bg-indigo-500/15 transition">
+                    그림(figure)
+                  </button>
+                  <button type="button" id="explain-chip-paragraph" onclick="app.selectExplainPromptScope('paragraph')"
+                          class="px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-medium hover:bg-indigo-500/15 transition">
+                    문단
+                  </button>
+                  <button type="button" id="explain-chip-sentence" onclick="app.selectExplainPromptScope('sentence')"
+                          class="px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-medium hover:bg-indigo-500/15 transition">
+                    문장
+                  </button>
+                </div>
+                <textarea id="prompt-explain-input" rows="3" oninput="app.handleExplainPromptInput(this.value)"
+                          placeholder="수식과 알고리즘은 직관을 먼저 설명하고 코드 구현과 연결해주세요"
+                          class="w-full rounded-2xl bg-white dark:bg-[#1b1b23] border border-zinc-200 dark:border-zinc-700 px-4 py-3 text-[13.5px] text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-[#5850ec] resize-none leading-relaxed select-text"></textarea>
+              </div>
+
+              <!-- 3. 키워드 사전 프롬프트 -->
+              <div class="space-y-2">
+                <label for="prompt-keyword-input" class="block text-[15px] font-bold text-zinc-900 dark:text-white">키워드 사전 프롬프트</label>
+                <textarea id="prompt-keyword-input" rows="3" oninput="app.markPromptSettingsDirty()"
+                          placeholder="영문 용어와 약어는 유지하고 논문에서 쓰인 의미를 설명해주세요"
+                          class="w-full rounded-2xl bg-white dark:bg-[#1b1b23] border border-zinc-200 dark:border-zinc-700 px-4 py-3 text-[13.5px] text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-[#5850ec] resize-none leading-relaxed select-text"></textarea>
+              </div>
+
+              <!-- 4. 3줄 요약 프롬프트 -->
+              <div class="space-y-2">
+                <label for="prompt-threeline-input" class="block text-[15px] font-bold text-zinc-900 dark:text-white">3줄 요약 프롬프트</label>
+                <textarea id="prompt-threeline-input" rows="3" oninput="app.markPromptSettingsDirty()"
+                          placeholder="해결하려는 문제, 핵심 방법, 주요 결과를 한 줄씩 정리해주세요"
+                          class="w-full rounded-2xl bg-white dark:bg-[#1b1b23] border border-zinc-200 dark:border-zinc-700 px-4 py-3 text-[13.5px] text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-[#5850ec] resize-none leading-relaxed select-text"></textarea>
+              </div>
+
+              <!-- 5. 요약 프롬프트 -->
+              <div class="space-y-2">
+                <label for="prompt-summary-input" class="block text-[15px] font-bold text-zinc-900 dark:text-white">요약 프롬프트</label>
+                <textarea id="prompt-summary-input" rows="3" oninput="app.markPromptSettingsDirty()"
+                          placeholder="모델 구조, 학습 방법, 실험 설정, 결과와 한계를 중심으로 정리해주세요"
+                          class="w-full rounded-2xl bg-white dark:bg-[#1b1b23] border border-zinc-200 dark:border-zinc-700 px-4 py-3 text-[13.5px] text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-[#5850ec] resize-none leading-relaxed select-text"></textarea>
+              </div>
+            </div>
+
+            <!-- Sticky Bottom Save Bar -->
+            <div class="px-7 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#16161d] flex items-center justify-end shrink-0">
+              <button id="set-prompts-save-btn" type="button" onclick="app.savePromptPersonalization()"
+                      class="px-7 py-2.5 rounded-xl bg-[#787f8a] hover:bg-[#5850ec] text-white text-sm font-bold transition shadow-sm">
+                저장
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  
+
+
+
+
+
+    <!-- =====================================================================
+       MOONLIGHT FULL-SCREEN LIBRARY / DASHBOARD WINDOW (Image 3)
+       ===================================================================== -->
+  <div id="moonlight-library-window" class="hidden fixed inset-0 z-50 bg-[#fcfcfc] dark:bg-[#0c0c0e] flex flex-row overflow-hidden select-none animate-in fade-in duration-150">
+    <!-- Left Sidebar -->
+    <aside id="library-left-sidebar" class="w-60 border-r border-zinc-200/90 dark:border-zinc-800 bg-[#fbfbfb] dark:bg-[#101014] flex flex-col justify-between p-4 shrink-0 transition-all">
+      <div class="space-y-6">
+        <!-- Logo & Collapse Button -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5 cursor-pointer" onclick="app.closeFullLibraryView()">
+            <div id="library-brand-logo" class="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-900 via-indigo-700 to-pink-500 shadow-sm flex items-center justify-center transition">
+              <div class="w-2.5 h-2.5 rounded-full bg-white/90"></div>
+            </div>
+            <span id="library-brand-title" class="text-base font-bold text-zinc-900 dark:text-white tracking-tight">Research Studio</span>
+          </div>
+          <button onclick="app.toggleLibrarySidebar()" class="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="사이드바 토글">
+            <svg class="w-4 h-4 fill-none stroke-current stroke-2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+          </button>
+        </div>
+
+        <!-- Menu Nav -->
+        <nav class="space-y-1">
+          <!-- 1. 최근 열어본 논문 -->
+          <button id="lib-nav-recent" onclick="app.switchLibraryTab('recent')"
+                  class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-zinc-200/80 dark:bg-zinc-800 text-zinc-900 dark:text-white transition">
+            <svg class="w-3.5 h-3.5 text-zinc-600 dark:text-zinc-300 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>최근 열어본 논문</span>
+          </button>
+
+          <!-- 2. 라이브러리 검색 -->
+          <button id="lib-nav-search" onclick="app.switchLibraryTab('search')"
+                  class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition">
+            <svg class="w-3.5 h-3.5 text-zinc-400 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span>라이브러리 검색</span>
+          </button>
+
+          <!-- 3. 라이브러리 (with + button) -->
+          <div>
+            <div id="lib-nav-folders" onclick="app.switchLibraryTab('library')"
+                 class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 cursor-pointer transition group">
+              <div class="flex items-center gap-2.5">
+                <svg class="w-3.5 h-3.5 text-zinc-400 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                <span>라이브러리</span>
+              </div>
+              <button onclick="event.stopPropagation(); app.promptCreateLibraryFolder();"
+                      class="w-5 h-5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition" title="새 폴더 추가">
+                +
+              </button>
+            </div>
+            <!-- Subfolder List -->
+            <div id="lib-folder-tree" class="pl-6 pr-2 py-1 space-y-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            </div>
+          </div>
+        </nav>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="space-y-3 pt-4 border-t border-zinc-200/80 dark:border-zinc-800">
+        <button onclick="app.switchLibraryTab('trash')" class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition">
+          <svg class="w-3.5 h-3.5 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          <span>휴지통</span>
+        </button>
+
+        <div class="flex items-center justify-end pt-1">
+          <!-- Avatar badge: User Nickname -->
+          <button type="button" id="library-user-avatar" onclick="app.openBrandStudioModal()"
+                  class="relative w-7 h-7 rounded-full bg-teal-500 text-white text-[10.5px] font-bold flex items-center justify-center cursor-pointer shadow-xs hover:opacity-90 transition border-0" title="내 프로필 및 브랜드 테마 설정">
+            <span id="library-user-avatar-text">Guest</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Table View -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-[#121217] relative">
+      <!-- Top Action Bar -->
+      <div class="px-8 py-5 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/80">
+        <div class="flex items-center gap-2">
+          <h2 id="lib-view-title" class="text-[17px] font-bold text-zinc-900 dark:text-white">최근 열어본 논문</h2>
+          <button class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" title="최근 열람하거나 보관된 논문 목록입니다">
+            <svg class="w-4 h-4 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- View Toggle: List | Grid -->
+          <div class="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-lg p-0.5 text-zinc-500">
+            <button id="lib-view-list-btn" onclick="app.setLibraryLayoutMode('list')" class="p-1 rounded-md bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs">
+              <svg class="w-3.5 h-3.5 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            </button>
+            <button id="lib-view-grid-btn" onclick="app.setLibraryLayoutMode('grid')" class="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+              <svg class="w-3.5 h-3.5 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            </button>
+          </div>
+
+          <!-- Search input -->
+          <div class="relative">
+            <input id="lib-main-search" type="text" placeholder="논문 검색..." oninput="app.filterLibraryTable(this.value)"
+                   class="pl-7 pr-3 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs bg-zinc-50 dark:bg-zinc-800/50 w-36 focus:w-56 focus:outline-none focus:border-indigo-500 transition-all" />
+            <svg class="w-3.5 h-3.5 text-zinc-400 absolute left-2 top-1/2 -translate-y-1/2 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </div>
+
+          <!-- Sort / Filter -->
+          <button onclick="app.toggleLibrarySort()" class="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="정렬">
+            <svg class="w-4 h-4 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+          </button>
+
+          <!-- 논문 업로드 Button (Image 3) -->
+          <button onclick="document.getElementById('pdf-upload-input').click()"
+                  class="px-4 py-1.5 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold flex items-center gap-1.5 hover:opacity-90 shadow-sm transition">
+            <svg class="w-3.5 h-3.5 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <span>논문 업로드</span>
+            <svg class="w-3 h-3 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+
+          <!-- 새 창에서 열기 (library.html) -->
+          <button onclick="window.open('library.html', '_blank')"
+                  class="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="새 탭 창으로 라이브러리 열기">
+            <svg class="w-4 h-4 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          </button>
+
+          <!-- Close / Return to Reader -->
+          <button onclick="app.closeFullLibraryView()"
+                  class="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="리더기로 돌아가기 (Esc)">
+            <svg class="w-5 h-5 stroke-current fill-none stroke-2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Table View Container -->
+      <div class="flex-1 overflow-y-auto px-8 py-2">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr class="border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 select-none">
+              <th class="py-2.5 font-normal">제목</th>
+              <th class="py-2.5 font-normal w-36">레이팅 ≡</th>
+              <th class="py-2.5 font-normal w-24">노트</th>
+              <th class="py-2.5 font-normal w-28">태그 ▽</th>
+              <th class="py-2.5 font-normal w-32">마지막 접근</th>
+            </tr>
+          </thead>
+          <tbody id="lib-table-body" class="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+            <!-- Dynamically populated rows from app.papers -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Bottom Pagination -->
+      <div class="px-8 py-4 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-center gap-3 text-xs text-zinc-500">
+        <button class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">&lt;</button>
+        <span class="w-6 h-6 rounded-md bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-zinc-900 dark:text-white">1</span>
+        <button class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">&gt;</button>
+      </div>
+
+      <!-- Bottom Right Floating Nebula Button (Image 3) -->
+      <div class="absolute bottom-6 right-8">
+        <button id="library-nebula-btn" onclick="app.closeFullLibraryView()"
+                class="w-11 h-11 rounded-full shadow-xl bg-gradient-to-tr from-purple-900 via-indigo-700 to-pink-500 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition" title="리더기로 돌아가기">
+          <div class="w-3.5 h-3.5 rounded-full bg-white/90"></div>
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="papers-data.js"></script>
+  <script src="storage-db.js"></script>
+  <script src="academic-api.js"></script>
+  <script src="infographic-engine.js"></script>
+  <script src="pdf-engine.js"></script>
+  <script src="ai-service.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

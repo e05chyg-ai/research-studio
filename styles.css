@@ -1,0 +1,620 @@
+/* Custom AI Research Studio — Stylesheet */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --font-sans: 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-serif: 'Crimson Pro', 'Times New Roman', Georgia, serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --reader-font-size: 16px;
+  --page-trans-font-size: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Hide number input spinners globally so numbers are never obscured by browser steppers */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+/* Universal no-scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Dynamic Font Size Scaling from 화면 설정 -> 글꼴 크기 & 페이지 번역 별도 크기 */
+.reader-scalable-text {
+  font-size: calc(var(--reader-font-size) * 0.8125) !important;
+  line-height: 1.68;
+}
+
+.page-trans-scalable-text {
+  font-size: var(--page-trans-font-size) !important;
+  line-height: 1.74;
+}
+
+/* Academic Paper Sheet */
+.moon-paper-sheet {
+  font-family: var(--font-serif);
+  user-select: text;
+  -webkit-user-select: text;
+  position: relative;
+  transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.08);
+}
+
+.dark .moon-paper-sheet {
+  background-color: #1c1c20;
+  color: #e4e4e7;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.65);
+}
+
+html:not(.dark) .moon-paper-sheet {
+  background-color: #ffffff;
+  color: #18181b;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.07);
+}
+
+/* Vertical arXiv Stamp */
+.arxiv-vertical-stamp {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-family: var(--font-serif);
+  letter-spacing: 0.03em;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Auto-Highlight & Multi-Color Markup Styles */
+.ai-highlight {
+  position: relative;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  border-radius: 2px;
+  padding: 0 1px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.ai-highlight:hover {
+  background-color: rgba(99, 102, 241, 0.22) !important;
+}
+
+.hl-novelty {
+  border-bottom: 2px solid #818cf8;
+  background-color: rgba(129, 140, 248, 0.08);
+}
+.dark .hl-novelty {
+  border-bottom: 2px solid #6366f1;
+  background-color: rgba(99, 102, 241, 0.12);
+}
+
+.hl-methodology {
+  border-bottom: 2px solid #38bdf8;
+  background-color: rgba(56, 189, 248, 0.08);
+}
+.dark .hl-methodology {
+  border-bottom: 2px solid #0ea5e9;
+  background-color: rgba(14, 165, 233, 0.12);
+}
+
+.hl-result {
+  border-bottom: 2px solid #34d399;
+  background-color: rgba(52, 211, 153, 0.08);
+}
+.dark .hl-result {
+  border-bottom: 2px solid #10b981;
+  background-color: rgba(16, 185, 129, 0.12);
+}
+
+.hl-formula {
+  border-bottom: 2px solid #fbbf24;
+  background-color: rgba(251, 191, 36, 0.08);
+}
+.dark .hl-formula {
+  border-bottom: 2px solid #f59e0b;
+  background-color: rgba(245, 158, 11, 0.12);
+}
+
+/* ================= AUTO-HIGHLIGHT PRESETS (Basic, Deep, Stroke) ================= */
+/* Preset 1: Moonlight Basic (독창성: Pink, 방법: Green, 결과: Light Blue) */
+.autohl-preset-basic .hl-novelty,
+.autohl-basic-novelty {
+  border-bottom: 2.5px solid #f87171 !important;
+  background-color: rgba(254, 205, 211, 0.55) !important;
+}
+.autohl-preset-basic .hl-methodology,
+.autohl-basic-methodology {
+  border-bottom: 2.5px solid #22c55e !important;
+  background-color: rgba(187, 247, 208, 0.55) !important;
+}
+.autohl-preset-basic .hl-result,
+.autohl-basic-result {
+  border-bottom: 2.5px solid #3b82f6 !important;
+  background-color: rgba(191, 219, 254, 0.55) !important;
+}
+
+/* Preset 2: Deep Spread (독창성: Peach, 방법: Teal, 결과: Lavender) */
+.autohl-preset-deep .hl-novelty,
+.autohl-deep-novelty {
+  border-bottom: 2.5px solid #f97316 !important;
+  background-color: rgba(254, 215, 170, 0.55) !important;
+}
+.autohl-preset-deep .hl-methodology,
+.autohl-deep-methodology {
+  border-bottom: 2.5px solid #14b8a6 !important;
+  background-color: rgba(153, 246, 228, 0.55) !important;
+}
+.autohl-preset-deep .hl-result,
+.autohl-deep-result {
+  border-bottom: 2.5px solid #9333ea !important;
+  background-color: rgba(221, 214, 254, 0.55) !important;
+}
+
+/* Preset 3: Point Stroke (독창성: Solid, 방법: Dashed, 결과: Double) */
+.autohl-preset-stroke .hl-novelty,
+.autohl-stroke-novelty {
+  background-color: transparent !important;
+  border-bottom: 2.5px solid #18181b !important;
+}
+.dark .autohl-preset-stroke .hl-novelty,
+.dark .autohl-stroke-novelty {
+  border-bottom-color: #f4f4f5 !important;
+}
+
+.autohl-preset-stroke .hl-methodology,
+.autohl-stroke-methodology {
+  background-color: transparent !important;
+  border-bottom: 2.5px dashed #18181b !important;
+}
+.dark .autohl-preset-stroke .hl-methodology,
+.dark .autohl-stroke-methodology {
+  border-bottom-color: #f4f4f5 !important;
+}
+
+.autohl-preset-stroke .hl-result,
+.autohl-stroke-result {
+  background-color: transparent !important;
+  border-bottom: 3.5px double #18181b !important;
+}
+.dark .autohl-preset-stroke .hl-result,
+.dark .autohl-stroke-result {
+  border-bottom-color: #f4f4f5 !important;
+}
+
+/* PDF Canvas Auto-Highlight Overlay Layer */
+.pdf-autohl-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.pdf-autohl-item {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+  transition: opacity 0.15s ease, outline 0.12s ease;
+}
+.dark .pdf-autohl-item {
+  mix-blend-mode: screen;
+}
+
+.pdf-autohl-item:hover {
+  outline: 2px solid rgba(99, 102, 241, 0.85);
+  opacity: 0.95;
+}
+
+/* User Custom Multi-Color Highlights (Moonlight 5 Colors) */
+.hl-user, .hl-user-pink {
+  border-bottom: 2px solid #ec4899;
+  background-color: rgba(244, 114, 182, 0.35);
+}
+.hl-user-yellow {
+  border-bottom: 2px solid #eab308;
+  background-color: rgba(254, 240, 138, 0.48);
+}
+.hl-user-green {
+  border-bottom: 2px solid #22c55e;
+  background-color: rgba(187, 247, 208, 0.48);
+}
+.hl-user-cyan, .hl-user-blue {
+  border-bottom: 2px solid #06b6d4;
+  background-color: rgba(186, 230, 253, 0.48);
+}
+.hl-user-coral, .hl-user-peach, .hl-user-red {
+  border-bottom: 2px solid #f87171;
+  background-color: rgba(254, 202, 202, 0.48);
+}
+.hl-user-purple {
+  border-bottom: 2px solid #a855f7;
+  background-color: rgba(168, 85, 247, 0.28);
+}
+
+.highlights-off .ai-highlight:not([class*="hl-user"]) {
+  border-bottom-color: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Inline Citation & Internal Section/Figure Preview Links */
+.citation-link {
+  color: #2563eb;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 1px;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+}
+
+.dark .citation-link {
+  color: #60a5fa;
+}
+
+.citation-link:hover {
+  background-color: rgba(59, 130, 246, 0.2);
+  text-decoration: underline;
+}
+
+.internal-ref-link {
+  color: #0d9488;
+  font-weight: 600;
+  border-bottom: 1px dashed #14b8a6;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.dark .internal-ref-link {
+  color: #2dd4bf;
+}
+
+.internal-ref-link:hover {
+  background-color: rgba(20, 184, 166, 0.18);
+}
+
+/* Focus Scan Square Icon Button next to Headings */
+.heading-scan-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #71717a;
+  background: rgba(148, 163, 184, 0.08);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dark .heading-scan-btn {
+  color: #a1a1aa;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.heading-scan-btn:hover {
+  color: #6366f1;
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.15);
+  transform: scale(1.06);
+}
+
+.related-paper-card {
+  position: relative;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.page-translate-tab {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+/* PDF.js Uploaded Page Layer + Side-by-Side Page Translation + 1:1 Layout Overlay */
+.pdf-page-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 auto 1.5rem auto;
+}
+
+#pdfjs-pages-wrapper.split-page-trans-mode {
+  max-width: 1520px !important;
+}
+
+#pdfjs-pages-wrapper.split-page-trans-mode .pdf-page-row {
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+@media (max-width: 1180px) {
+  #pdfjs-pages-wrapper.split-page-trans-mode .pdf-page-row {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+.pdf-page-container {
+  position: relative;
+  margin: 0;
+  flex-shrink: 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  overflow: hidden !important;
+  background: white;
+}
+
+.pdf-page-container canvas {
+  display: block;
+  margin: 0 auto;
+}
+
+/* PDF.js Official textLayer & pdf-text-layer positioning and selection */
+.textLayer,
+.pdf-text-layer {
+  position: absolute;
+  text-align: initial;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden !important;
+  opacity: 1;
+  line-height: 1.0;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  user-select: text;
+  -webkit-user-select: text;
+  z-index: 10;
+}
+
+.textLayer span,
+.pdf-text-layer span,
+.textLayer span.markedContent {
+  color: transparent !important;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+/* Prevent rotated margin watermarks (e.g. arXiv identifier) from being dragged or selected */
+.textLayer span[data-no-select="true"],
+.pdf-text-layer span[data-no-select="true"] {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  pointer-events: none !important;
+}
+
+/* Smooth, elegant text selection highlight without dark blotches or double text */
+.textLayer ::selection,
+.pdf-text-layer ::selection {
+  background: rgba(99, 102, 241, 0.28) !important;
+  color: transparent !important;
+}
+
+.textLayer br::selection,
+.pdf-text-layer br::selection {
+  background: transparent !important;
+}
+
+/* 1:1 Bounding-Box Layout-Preserving Translation Layer on Original PDF Canvas */
+.pdf-layout-trans-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.pdf-layout-trans-block {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.97);
+  color: #141418;
+  font-family: var(--font-sans);
+  line-height: 1.38;
+  padding: 1px 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  transition: box-shadow 0.14s ease, z-index 0.14s ease;
+}
+
+.pdf-layout-trans-block:hover {
+  overflow: visible;
+  z-index: 40;
+  background: #ffffff;
+  box-shadow: 0 4px 18px rgba(79, 70, 229, 0.22), 0 0 0 1.5px rgba(99, 102, 241, 0.65);
+}
+
+/* Side-by-Side Page Translation Card */
+.pdf-page-trans-card {
+  width: 680px;
+  max-width: 94vw;
+  border-radius: 6px;
+  padding: 2rem 2.25rem;
+  user-select: text;
+  -webkit-user-select: text;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  background: #ffffff;
+  color: #18181b;
+  border: 1px solid #e4e4e7;
+}
+
+.dark .pdf-page-trans-card {
+  background: #18181f;
+  color: #e4e4e7;
+  border-color: #2c2c36;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.55);
+}
+
+/* Click-to-copy KaTeX math blocks */
+.katex-copyable {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 3px;
+  transition: background-color 0.15s ease;
+}
+
+.katex-copyable:hover {
+  background-color: rgba(99, 102, 241, 0.14);
+}
+
+/* Moonlight Settings Custom Range Slider */
+input[type="range"].moon-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  background: #ebedf2;
+  outline: none;
+}
+
+.dark input[type="range"].moon-slider {
+  background: #2b2b36;
+}
+
+input[type="range"].moon-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #5850ec;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(88, 80, 236, 0.45);
+  border: 2px solid #ffffff;
+  transition: transform 0.12s ease;
+}
+
+input[type="range"].moon-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: translateY(5px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.floating-anim {
+  animation: popIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.ai-prose p {
+  margin-bottom: 0.5rem;
+}
+.ai-prose p:last-child {
+  margin-bottom: 0;
+}
+.ai-prose ul, .ai-prose ol {
+  margin-left: 1.15rem;
+  margin-bottom: 0.5rem;
+}
+.ai-prose ul {
+  list-style-type: disc;
+}
+.ai-prose ol {
+  list-style-type: decimal;
+}
+
+/* ================= PRINT STYLES FOR CLEAN EXPORT ================= */
+@media print {
+  header,
+  aside,
+  #right-panel,
+  #export-options-popover,
+  #paper-info-popover,
+  .toolbar-hover-flyout,
+  #outline-drawer,
+  #in-paper-search-bar,
+  #page-translate-widget,
+  #page-trans-fontsize-bar,
+  #original-pdf-pill,
+  #selection-toolbar,
+  #settings-modal,
+  #universal-modal {
+    display: none !important;
+  }
+
+  body,
+  #center-viewport {
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  #pdfjs-pages-wrapper,
+  #paper-sheet {
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+  }
+
+  .pdf-page-container {
+    page-break-after: always !important;
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 auto 20px auto !important;
+  }
+}
+.ai-prose strong {
+  font-weight: 700;
+}

@@ -1,0 +1,22 @@
+{
+  "name": "moonlight-research-studio",
+  "version": "1.0.0",
+  "description": "AI-powered academic paper reader and research studio",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve .",
+    "dev": "serve ."
+  },
+  "keywords": [
+    "ai",
+    "academic",
+    "paper-reader",
+    "pdf",
+    "latex",
+    "gemini",
+    "gpt",
+    "claude"
+  ],
+  "author": "",
+  "license": "MIT"
+}
