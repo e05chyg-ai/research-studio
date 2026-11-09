@@ -720,7 +720,7 @@ class MoonlightApp {
     this.userNotesByPaper = {};
     this.layoutTranslationEnabled = false;
     this.pageTranslationEnabled = false;
-    window.moonlightAI?.setConfig("", "gemini-3.1-flash-lite");
+    window.moonlightAI?.setConfig("", "gemini-2.5-flash");
     this.applySavedAppSettingsOnBoot();
     this.updateModelPillUI();
     this.applyBrandConfigUI();
@@ -936,6 +936,7 @@ class MoonlightApp {
     this.renderLeftMaterialsList();
     this.renderCurrentPaper();
     this.renderRightPanelAll();
+    this.refreshLiveRecommendations();
     this.closeFloatingCard();
     this.refreshIcons();
 
@@ -1579,7 +1580,7 @@ class MoonlightApp {
       return;
     }
 
-    const activeModel = window.moonlightAI?.getActiveModel() || "gemini-3.1-flash-lite";
+    const activeModel = window.moonlightAI?.getActiveModel() || "gemini-2.5-flash";
     const cacheKey = `${this.currentPaper.id}__${activeModel}`;
 
     if (!force && this.paperModelQuestionCache && this.paperModelQuestionCache[cacheKey]) {
@@ -1702,19 +1703,29 @@ class MoonlightApp {
     });
     this.renderDiscussionSection();
 
-    const answer = await window.moonlightAI.chat(
-      text,
-      this.currentPaper,
-      contextQuote,
-      extraRefs
-    );
+    try {
+      const answer = await window.moonlightAI.chat(
+        text,
+        this.currentPaper,
+        contextQuote,
+        extraRefs
+      );
 
-    this.discussionsByPaper[key].pop();
-    this.discussionsByPaper[key].push({
-      role: "assistant",
-      content: answer
-    });
-    this.renderDiscussionSection();
+      this.discussionsByPaper[key].pop();
+      this.discussionsByPaper[key].push({
+        role: "assistant",
+        content: answer || "답변을 생성하지 못했습니다. 잠시 후 다시 질문해 주세요."
+      });
+    } catch (err) {
+      console.error("Chat invocation error:", err);
+      this.discussionsByPaper[key].pop();
+      this.discussionsByPaper[key].push({
+        role: "assistant",
+        content: `⚠️ **답변 생성 중 오류가 발생했습니다:** ${this.escapeHtml(err.message || "네트워크 연결을 확인해 주세요.")}\n\n*상단 ⚙️ 설정에서 API 키가 올바른지 확인하거나 다른 활성 모델로 변경해 보세요.*`
+      });
+    } finally {
+      this.renderDiscussionSection();
+    }
 
     if (this.currentPaper) {
       window.researchDB?.logActivity({
@@ -2200,10 +2211,10 @@ class MoonlightApp {
       return;
     }
 
-    if (matchEl) matchEl.textContent = `일치율 ${top.matchRate || "85%"}`;
+    if (matchEl) matchEl.textContent = `일치율 ${top.matchRate || "95%"}`;
     if (labelEl) labelEl.textContent = top.recommendLabel || "관련 연구 추천";
     if (titleEl) titleEl.textContent = top.title;
-    if (descEl) descEl.textContent = top.summary || top.abstract || "주제 연관 추천 논문";
+    if (descEl) descEl.textContent = top.aiRationale || top.aiReason || top.summary || top.abstract || "주제 연관 추천 논문";
     if (moreEl) moreEl.textContent = `외 ${Math.max(0, this.relatedPapers.length - 1)}편 더 보기`;
   }
 
@@ -2215,11 +2226,16 @@ class MoonlightApp {
     }
 
     const titleEl = document.getElementById("rel-card-title");
+    const descEl = document.getElementById("rel-card-desc");
     const activeModelName = window.moonlightAI?.getModelDisplayName() || "주 AI 모델";
     if (titleEl) titleEl.textContent = `${activeModelName} 추천 분석 중...`;
+    if (descEl) descEl.textContent = "현재 논문의 핵심 가설과 관련 문헌을 심층 분석하고 있습니다...";
 
-    const recs = await window.scholarAPI.fetchRelatedRecommendations(this.currentPaper, 5);
-    if (recs && recs.length > 0) {
+    try {
+      let recs = await window.scholarAPI.fetchRelatedRecommendations(this.currentPaper, 5);
+      if (!recs || recs.length === 0) {
+        recs = window.MOONLIGHT_RELATED_PAPERS || [];
+      }
       if (window.moonlightAI && typeof window.moonlightAI.analyzeAndRankRelatedPapers === "function") {
         this.relatedPapers = await window.moonlightAI.analyzeAndRankRelatedPapers(this.currentPaper, recs);
       } else {
@@ -2229,8 +2245,14 @@ class MoonlightApp {
           summary: r.summary || (r.abstract ? r.abstract.slice(0, 200) + "..." : "")
         }));
       }
+    } catch (err) {
+      console.warn("refreshLiveRecommendations error fallback:", err);
+      if (!this.relatedPapers || this.relatedPapers.length === 0) {
+        this.relatedPapers = window.MOONLIGHT_RELATED_PAPERS || [];
+      }
+    } finally {
+      this.updateSidebarRelatedCardUI();
     }
-    this.updateSidebarRelatedCardUI();
   }
 
   openRelatedPapersModal() {
@@ -2253,13 +2275,13 @@ class MoonlightApp {
         <div class="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-2">
           <div class="flex items-center justify-between">
             <span class="px-2 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-300 font-bold text-xs">
-              일치율 ${this.escapeHtml(rp.matchRate || "85%")} · ${this.escapeHtml(rp.recommendLabel || "추천")}
+              일치율 ${this.escapeHtml(rp.matchRate || "95%")} · ${this.escapeHtml(rp.recommendLabel || "추천")}
             </span>
             <span class="text-xs text-zinc-400">${this.escapeHtml(rp.venue || "학술지")} (${rp.year || ""})</span>
           </div>
           <h4 class="font-bold text-sm text-zinc-900 dark:text-white">${this.escapeHtml(rp.title)}</h4>
           <p class="text-xs text-zinc-500">${this.escapeHtml(Array.isArray(rp.authors) ? rp.authors.join(", ") : rp.authors)}</p>
-          ${rp.aiRationale ? `<div class="p-2.5 rounded-lg bg-indigo-50/60 dark:bg-indigo-900/20 text-xs text-indigo-700 dark:text-indigo-300 font-medium">💡 <strong>${this.escapeHtml(activeModelName)} 선정 근거:</strong> ${this.escapeHtml(rp.aiRationale)}</div>` : ""}
+          ${rp.aiRationale || rp.aiReason ? `<div class="p-2.5 rounded-lg bg-indigo-50/60 dark:bg-indigo-900/20 text-xs text-indigo-700 dark:text-indigo-300 font-medium">💡 <strong>${this.escapeHtml(activeModelName)} 선정 근거:</strong> ${this.escapeHtml(rp.aiRationale || rp.aiReason)}</div>` : ""}
           <p class="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">${this.escapeHtml(rp.summary || rp.abstract || "")}</p>
           <div class="pt-1 flex justify-end gap-2">
             <button onclick="app.openExploreModal('${this.escapeAttr(rp.title)}')"
@@ -3650,34 +3672,25 @@ class MoonlightApp {
   getAiModelCatalog() {
     return [
       // 1. Google Gemini
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", providerName: "Google Gemini", caption: "초고속 실시간 멀티모달 추론" },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", providerName: "Google Gemini", caption: "초고속 실시간 멀티모달 추론 (권장)" },
       { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "gemini", providerName: "Google Gemini", caption: "고성능 코딩 및 심층 학술 분석" },
       { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "gemini", providerName: "Google Gemini", caption: "차세대 멀티모달 종합 모델" },
       { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "gemini", providerName: "Google Gemini", caption: "200만 토큰 초대형 롱컨텍스트" },
       { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", provider: "gemini", providerName: "Google Gemini", caption: "경량 고속 표준 연구 모델" },
-      { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash Lite", provider: "gemini", providerName: "Google Gemini", caption: "기본 연구 보조 엔진" },
-      { id: "gemini-3-flash", name: "Gemini 3 Flash", provider: "gemini", providerName: "Google Gemini" },
-      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", provider: "gemini", providerName: "Google Gemini" },
-      { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", provider: "gemini", providerName: "Google Gemini" },
 
       // 2. OpenAI GPT
       { id: "gpt-4o", name: "GPT-4o", provider: "openai", providerName: "OpenAI", caption: "옴니모달 플래그십 모델" },
-      { id: "gpt-4o-mini", name: "GPT-4o mini", provider: "openai", providerName: "OpenAI", caption: "고속 경량 멀티모달 모델" },
+      { id: "gpt-4o-mini", name: "GPT-4o mini", provider: "openai", providerName: "OpenAI", caption: "고속 경량 멀티모달 모델 (권장)" },
       { id: "o1", name: "o1", provider: "openai", providerName: "OpenAI", caption: "복잡한 과학/수학 심층 추론" },
       { id: "o1-mini", name: "o1-mini", provider: "openai", providerName: "OpenAI", caption: "STEM 분야 고속 추론" },
       { id: "o3-mini", name: "o3-mini", provider: "openai", providerName: "OpenAI", caption: "차세대 고속 과학/코딩 추론" },
       { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: "openai", providerName: "OpenAI", caption: "고성능 비전 및 지식 처리" },
-      { id: "gpt-5-nano", name: "GPT-5 nano", provider: "openai", providerName: "OpenAI" },
-      { id: "gpt-6-luna", name: "GPT-6 Luna", provider: "openai", providerName: "OpenAI" },
-      { id: "gpt-6.1-sol", name: "GPT-6.1 Sol", provider: "openai", providerName: "OpenAI" },
 
       // 3. Anthropic Claude
       { id: "claude-3-7-sonnet-20250219", name: "Claude 3.7 Sonnet", provider: "claude", providerName: "Anthropic Claude", caption: "사고 모드(Thinking) 하이브리드 추론" },
-      { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", provider: "claude", providerName: "Anthropic Claude", caption: "최상위 학술 작문 및 심층 코딩" },
+      { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", provider: "claude", providerName: "Anthropic Claude", caption: "최상위 학술 작문 및 심층 코딩 (권장)" },
       { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", provider: "claude", providerName: "Anthropic Claude", caption: "초고속 즉시 요약 및 응답" },
-      { id: "claude-3-opus-20240229", name: "Claude 3 Opus", provider: "claude", providerName: "Anthropic Claude", caption: "복잡한 텍스트 뉘앙스 심층 해석" },
-      { id: "claude-sonnet-5", name: "Claude Sonnet 5", provider: "claude", providerName: "Anthropic Claude" },
-      { id: "claude-opus-5.5", name: "Claude Opus 5.5", provider: "claude", providerName: "Anthropic Claude" }
+      { id: "claude-3-opus-20240229", name: "Claude 3 Opus", provider: "claude", providerName: "Anthropic Claude", caption: "복잡한 텍스트 뉘앙스 심층 해석" }
     ];
   }
 
@@ -3729,7 +3742,7 @@ class MoonlightApp {
     if (!listEl) return;
 
     const catalog = this.getAiModelCatalog();
-    const currentModelId = window.moonlightAI?.getActiveModel() || "gemini-3.1-flash-lite";
+    const currentModelId = window.moonlightAI?.getActiveModel() || "gemini-2.5-flash";
 
     const groups = [
       { provider: "gemini", items: catalog.filter((m) => m.provider === "gemini") },
@@ -4119,18 +4132,18 @@ class MoonlightApp {
       this.updateProviderBadgeUI("claude", verificationResults.claude, !!claudeVal);
       this.syncAiModelSelectOptgroups(verificationResults);
 
-      let currentRequestedModel = modelSelect?.value || window.moonlightAI?.getActiveModel() || "gemini-3.1-flash-lite";
+      let currentRequestedModel = modelSelect?.value || window.moonlightAI?.getActiveModel() || "gemini-2.5-flash";
       let activeProvider = window.moonlightAI?.getModelProvider(currentRequestedModel) || "gemini";
 
       if (!verificationResults[activeProvider]) {
         if (verificationResults.gemini) {
-          currentRequestedModel = "gemini-3.1-flash-lite";
+          currentRequestedModel = "gemini-2.5-flash";
         } else if (verificationResults.openai) {
-          currentRequestedModel = "gpt-5-mini";
+          currentRequestedModel = "gpt-4o";
         } else if (verificationResults.claude) {
-          currentRequestedModel = "claude-3-7-sonnet";
+          currentRequestedModel = "claude-3-5-sonnet-20241022";
         } else {
-          currentRequestedModel = "gemini-3.1-flash-lite";
+          currentRequestedModel = "gemini-2.5-flash";
         }
       }
 
@@ -5037,7 +5050,7 @@ class MoonlightApp {
   }
 
   cycleModelQuick() {
-    const models = ["gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-4-argon"];
+    const models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
     const idx = models.indexOf(window.moonlightAI.getActiveModel());
     const next = models[(idx + 1) % models.length];
     window.moonlightAI.setConfig(window.moonlightAI.apiKey, next);
@@ -5045,7 +5058,7 @@ class MoonlightApp {
   }
 
   updateModelPillUI() {
-    const name = window.moonlightAI ? window.moonlightAI.getModelDisplayName() : "Gemini 3.1 Flash Lite";
+    const name = window.moonlightAI ? window.moonlightAI.getModelDisplayName() : "Gemini 2.5 Flash";
     const label = document.getElementById("chat-model-name-label");
     if (label) {
       label.textContent = name;
@@ -5817,7 +5830,7 @@ class MoonlightApp {
     if (langSelect) langSelect.value = s.language || "ko";
 
     const modelSelect = document.getElementById("set-ai-model-select");
-    if (modelSelect) modelSelect.value = s.aiModel || "gemini-3.1-flash-lite";
+    if (modelSelect) modelSelect.value = s.aiModel || "gemini-2.5-flash";
 
     const geminiInput = document.getElementById("modal-gemini-key");
     if (geminiInput) geminiInput.value = s.geminiApiKey || localStorage.getItem("research_studio_gemini_key") || window.moonlightAI?.apiKey || "";

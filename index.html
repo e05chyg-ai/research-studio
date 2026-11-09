@@ -1614,34 +1614,25 @@
                   <select id="set-ai-model-select" onchange="app.changeSettingAiModel(this.value)"
                           class="w-full appearance-none rounded-xl bg-white dark:bg-[#1d1d26] border border-zinc-200 dark:border-zinc-700 pl-9 pr-10 py-3 text-[14px] font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec] cursor-pointer">
                     <optgroup id="optgroup-gemini" label="Google Gemini">
-                      <option value="gemini-2.5-flash">Gemini 2.5 Flash (초고속 멀티모달)</option>
+                      <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (초고속 멀티모달 - 권장)</option>
                       <option value="gemini-2.5-pro">Gemini 2.5 Pro (고성능 심층 추론)</option>
                       <option value="gemini-2.0-flash">Gemini 2.0 Flash (차세대 멀티모달)</option>
                       <option value="gemini-1.5-pro">Gemini 1.5 Pro (200만 토큰 컨텍스트)</option>
                       <option value="gemini-1.5-flash">Gemini 1.5 Flash (경량 고속)</option>
-                      <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (빠른 연구 보조)</option>
-                      <option value="gemini-3-flash">Gemini 3 Flash</option>
-                      <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
-                      <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
                     </optgroup>
                     <optgroup id="optgroup-openai" label="OpenAI (GPT)">
                       <option value="gpt-4o">GPT-4o (옴니모달 플래그십)</option>
-                      <option value="gpt-4o-mini">GPT-4o mini (초고속 경량)</option>
+                      <option value="gpt-4o-mini">GPT-4o mini (초고속 경량 - 권장)</option>
                       <option value="o1">o1 (심층 과학/수학 추론)</option>
                       <option value="o1-mini">o1-mini (STEM 고속 추론)</option>
                       <option value="o3-mini">o3-mini (차세대 고성능 추론)</option>
                       <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                      <option value="gpt-5-nano">GPT-5 nano</option>
-                      <option value="gpt-6-luna">GPT-6 Luna</option>
-                      <option value="gpt-6.1-sol">GPT-6.1 Sol</option>
                     </optgroup>
                     <optgroup id="optgroup-claude" label="Anthropic (Claude)">
                       <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (하이브리드 추론)</option>
-                      <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (최상위 학술 분석)</option>
+                      <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (최상위 학술 분석 - 권장)</option>
                       <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (초고속 요약)</option>
                       <option value="claude-3-opus-20240229">Claude 3 Opus (복합 맥락 심층 해석)</option>
-                      <option value="claude-sonnet-5">Claude Sonnet 5</option>
-                      <option value="claude-opus-5.5">Claude Opus 5.5</option>
                     </optgroup>
                   </select>
                   <i data-lucide="chevron-down" class="w-4 h-4 text-zinc-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none"></i>
