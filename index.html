@@ -1044,7 +1044,18 @@
           </div>
 
           <!-- BOTTOM FIXED CHAT DOCK -->
-          <div class="p-3 border-t border-zinc-200 dark:border-[#24242c] bg-white dark:bg-[#121216] space-y-2.5 shrink-0">
+          <div class="p-3 border-t border-zinc-200 dark:border-[#24242c] bg-white dark:bg-[#121216] space-y-2 shrink-0">
+            <!-- AI Inferred Recommended Questions Header -->
+            <div id="suggested-questions-header" class="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 px-0.5">
+              <span class="flex items-center gap-1.5 truncate font-medium">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-500 shrink-0"></i>
+                <span id="suggested-questions-source-label" class="truncate font-medium">AI 논문 학습·추론 추천 질문</span>
+              </span>
+              <button type="button" onclick="app.cycleRandomSuggestedPrompt()" class="text-[10px] text-zinc-400 hover:text-indigo-500 shrink-0 transition flex items-center gap-1" title="추천 질문 새로고침">
+                <span>새로고침</span>
+                <i data-lucide="refresh-cw" class="w-2.5 h-2.5"></i>
+              </button>
+            </div>
             <div id="bottom-prompt-chips" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar"></div>
 
             <div id="chat-attachment-banner" class="hidden px-2.5 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-between gap-2 text-[11px]">
@@ -1602,7 +1613,7 @@
                   <span class="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 pointer-events-none text-sm">✦</span>
                   <select id="set-ai-model-select" onchange="app.changeSettingAiModel(this.value)"
                           class="w-full appearance-none rounded-xl bg-white dark:bg-[#1d1d26] border border-zinc-200 dark:border-zinc-700 pl-9 pr-10 py-3 text-[14px] font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec] cursor-pointer">
-                    <optgroup label="Google Gemini">
+                    <optgroup id="optgroup-gemini" label="Google Gemini">
                       <option value="gemini-2.5-flash">Gemini 2.5 Flash (초고속 멀티모달)</option>
                       <option value="gemini-2.5-pro">Gemini 2.5 Pro (고성능 심층 추론)</option>
                       <option value="gemini-2.0-flash">Gemini 2.0 Flash (차세대 멀티모달)</option>
@@ -1613,7 +1624,7 @@
                       <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
                       <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
                     </optgroup>
-                    <optgroup label="OpenAI (GPT)">
+                    <optgroup id="optgroup-openai" label="OpenAI (GPT)">
                       <option value="gpt-4o">GPT-4o (옴니모달 플래그십)</option>
                       <option value="gpt-4o-mini">GPT-4o mini (초고속 경량)</option>
                       <option value="o1">o1 (심층 과학/수학 추론)</option>
@@ -1624,7 +1635,7 @@
                       <option value="gpt-6-luna">GPT-6 Luna</option>
                       <option value="gpt-6.1-sol">GPT-6.1 Sol</option>
                     </optgroup>
-                    <optgroup label="Anthropic (Claude)">
+                    <optgroup id="optgroup-claude" label="Anthropic (Claude)">
                       <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (하이브리드 추론)</option>
                       <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (최상위 학술 분석)</option>
                       <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (초고속 요약)</option>
@@ -1651,7 +1662,7 @@
                       <div class="space-y-1">
                         <div class="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
                           <span>Google Gemini API 키</span>
-                          <span class="text-[10px] text-emerald-500">Gemini 모델군 활성화</span>
+                          <span id="modal-gemini-status" class="text-[10px] text-zinc-400">미인증 (검증 필요)</span>
                         </div>
                         <input id="modal-gemini-key" type="password" placeholder="AIzaSy..."
                                class="w-full rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec]" />
@@ -1661,7 +1672,7 @@
                       <div class="space-y-1">
                         <div class="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
                           <span>OpenAI API 키</span>
-                          <span class="text-[10px] text-emerald-500">GPT 모델군 활성화</span>
+                          <span id="modal-openai-status" class="text-[10px] text-zinc-400">미인증 (검증 필요)</span>
                         </div>
                         <input id="modal-openai-key" type="password" placeholder="sk-proj-..."
                                class="w-full rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec]" />
@@ -1671,15 +1682,16 @@
                       <div class="space-y-1">
                         <div class="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
                           <span>Anthropic Claude API 키</span>
-                          <span class="text-[10px] text-emerald-500">Claude 모델군 활성화</span>
+                          <span id="modal-claude-status" class="text-[10px] text-zinc-400">미인증 (검증 필요)</span>
                         </div>
                         <input id="modal-claude-key" type="password" placeholder="sk-ant-..."
                                class="w-full rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec]" />
                       </div>
 
-                      <div class="pt-1 flex justify-end">
-                        <button type="button" onclick="app.saveAllApiSettings()" class="px-4 py-2 rounded-lg bg-[#5850ec] hover:bg-indigo-500 text-white text-xs font-bold transition">
-                          API 키 모두 저장
+                      <div class="pt-1 flex items-center justify-between">
+                        <span id="modal-api-status-msg" class="text-[11px] text-zinc-500 dark:text-zinc-400"></span>
+                        <button type="button" id="btn-save-all-api" onclick="app.saveAllApiSettings()" class="px-4 py-2 rounded-lg bg-[#5850ec] hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5">
+                          <span id="btn-save-all-api-text">API 키 모두 저장</span>
                         </button>
                       </div>
                     </div>

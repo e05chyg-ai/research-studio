@@ -116,6 +116,145 @@ class MoonlightAIService {
     return "gemini";
   }
 
+  getApiKeyForProvider(provider) {
+    const s = window.researchDB?.getAppSettings() || {};
+    if (provider === "gemini") {
+      return localStorage.getItem("research_studio_gemini_key") || s.geminiApiKey || this.apiKey || "";
+    }
+    if (provider === "openai") {
+      return localStorage.getItem("research_studio_openai_key") || s.openaiApiKey || "";
+    }
+    if (provider === "claude") {
+      return localStorage.getItem("research_studio_claude_key") || s.claudeApiKey || "";
+    }
+    return "";
+  }
+
+  isProviderVerified(provider) {
+    const s = window.researchDB?.getAppSettings() || {};
+    const verified = s.verifiedApis || {};
+    if (verified[provider] === true) return true;
+    try {
+      const raw = localStorage.getItem("research_studio_verified_apis");
+      if (raw) {
+        const obj = JSON.parse(raw);
+        if (obj[provider] === true) return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  setProviderVerification(provider, isValid) {
+    const s = window.researchDB?.getAppSettings() || {};
+    const verified = s.verifiedApis || { gemini: false, openai: false, claude: false };
+    verified[provider] = Boolean(isValid);
+    localStorage.setItem("research_studio_verified_apis", JSON.stringify(verified));
+    window.researchDB?.saveAppSettings({ verifiedApis: verified });
+  }
+
+  async verifyApiKey(provider, apiKey) {
+    const key = (apiKey || "").trim();
+    if (!key) {
+      this.setProviderVerification(provider, false);
+      return { valid: false, message: "API 키가 입력되지 않았습니다." };
+    }
+
+    if (provider === "gemini") {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.models) && data.models.length > 0) {
+            this.setProviderVerification("gemini", true);
+            return { valid: true, message: "Gemini API 키 검증 완료" };
+          }
+        }
+        const errJson = await res.json().catch(() => ({}));
+        const msg = errJson?.error?.message || `Gemini 인증 오류 (${res.status})`;
+        this.setProviderVerification("gemini", false);
+        return { valid: false, message: msg };
+      } catch (e) {
+        this.setProviderVerification("gemini", false);
+        return { valid: false, message: `검증 중 네트워크 오류: ${e.message}` };
+      }
+    }
+
+    if (provider === "openai") {
+      try {
+        const res = await fetch("https://api.openai.com/v1/models", {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${key}`
+          }
+        });
+        if (res.ok) {
+          this.setProviderVerification("openai", true);
+          return { valid: true, message: "OpenAI API 키 검증 완료" };
+        }
+        const errJson = await res.json().catch(() => ({}));
+        const msg = errJson?.error?.message || `OpenAI 인증 오류 (${res.status})`;
+        this.setProviderVerification("openai", false);
+        return { valid: false, message: msg };
+      } catch (e) {
+        this.setProviderVerification("openai", false);
+        return { valid: false, message: `검증 중 네트워크 오류: ${e.message}` };
+      }
+    }
+
+    if (provider === "claude") {
+      try {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true"
+          },
+          body: JSON.stringify({
+            model: "claude-3-5-haiku-20241022",
+            max_tokens: 1,
+            messages: [{ role: "user", content: "ping" }]
+          })
+        });
+        if (res.ok) {
+          this.setProviderVerification("claude", true);
+          return { valid: true, message: "Claude API 키 검증 완료" };
+        }
+        if (res.status === 401 || res.status === 403) {
+          this.setProviderVerification("claude", false);
+          return { valid: false, message: "유효하지 않은 Claude API 키 (401/403)" };
+        }
+        const text = await res.text();
+        if (res.status === 400 && !text.includes("invalid_x_api_key") && !text.includes("authentication_error")) {
+          this.setProviderVerification("claude", true);
+          return { valid: true, message: "Claude API 키 검증 완료" };
+        }
+        this.setProviderVerification("claude", false);
+        return { valid: false, message: `Claude 인증 오류 (${res.status})` };
+      } catch (e) {
+        this.setProviderVerification("claude", false);
+        return { valid: false, message: `검증 중 네트워크 오류: ${e.message}` };
+      }
+    }
+
+    return { valid: false, message: "지원되지 않는 제공자입니다." };
+  }
+
+  async verifyAllApiKeys(keys) {
+    const results = {};
+    if (typeof keys.gemini === "string") {
+      results.gemini = await this.verifyApiKey("gemini", keys.gemini);
+    }
+    if (typeof keys.openai === "string") {
+      results.openai = await this.verifyApiKey("openai", keys.openai);
+    }
+    if (typeof keys.claude === "string") {
+      results.claude = await this.verifyApiKey("claude", keys.claude);
+    }
+    return results;
+  }
+
   setConfig(apiKey, model) {
     if (typeof apiKey === "string") {
       this.apiKey = apiKey.trim();
@@ -130,7 +269,9 @@ class MoonlightAIService {
   }
 
   hasApiKey() {
-    return Boolean(this.apiKey && this.apiKey.length > 10);
+    const activeModel = this.getActiveModel();
+    const provider = this.getModelProvider(activeModel);
+    return this.isProviderVerified(provider);
   }
 
   resetConversation() {
@@ -173,6 +314,78 @@ class MoonlightAIService {
       sys += `\n\n[추가 작업 지침]:\n${extraGuidance.trim()}`;
     }
     return sys;
+  }
+
+  /**
+   * Universal Dispatcher: Routes any AI task to whichever AI model is currently active
+   */
+  async callActiveAIModel(prompt, options = {}) {
+    const { systemInstruction = "", imageBase64 = null } = options;
+    const activeModel = this.getActiveModel();
+    const provider = this.getModelProvider(activeModel);
+
+    if (provider === "openai") {
+      const apiKey = this.getApiKeyForProvider("openai");
+      if (!apiKey) throw new Error("OpenAI API 키가 등록되지 않았습니다.");
+      return await this.callOpenAIChatAPI(activeModel, apiKey, prompt, systemInstruction, imageBase64);
+    } else if (provider === "claude") {
+      const apiKey = this.getApiKeyForProvider("claude");
+      if (!apiKey) throw new Error("Anthropic Claude API 키가 등록되지 않았습니다.");
+      return await this.callClaudeMessagesAPI(activeModel, apiKey, prompt, systemInstruction, imageBase64);
+    } else {
+      // Gemini
+      const apiKey = this.getApiKeyForProvider("gemini");
+      if (!apiKey) throw new Error("Gemini API 키가 등록되지 않았습니다.");
+      return await this.callGeminiAPI(activeModel, apiKey, prompt, systemInstruction, imageBase64);
+    }
+  }
+
+  async callGeminiAPI(model, apiKey, prompt, systemInstruction = "", imageBase64 = null) {
+    const cleanModel = (model || this.getActiveModel()).replace(/^models\//, "");
+    const sys = systemInstruction || this.buildSystemInstruction();
+
+    // 1. Try standard generateContent endpoint
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const parts = [];
+      if (prompt) parts.push({ text: prompt });
+      if (imageBase64) {
+        parts.push({
+          inline_data: {
+            mime_type: "image/png",
+            data: imageBase64
+          }
+        });
+      }
+      const body = {
+        contents: [{ role: "user", parts }]
+      };
+      if (sys) {
+        body.system_instruction = { parts: [{ text: sys }] };
+      }
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text && text.trim()) return text.trim();
+      }
+    } catch (e) {
+      console.warn("Gemini generateContent fallback to interactions API:", e);
+    }
+
+    // 2. Fallback to Interactions API
+    let payload = prompt;
+    if (imageBase64) {
+      payload = [
+        { type: "text", text: prompt },
+        { type: "image", data: imageBase64, mime_type: "image/png" }
+      ];
+    }
+    return await this.callGeminiInteractionsAPI(payload, sys);
   }
 
   /**
@@ -294,6 +507,40 @@ class MoonlightAIService {
     return clean;
   }
 
+  async translateWithActiveModel(text, targetLang = null) {
+    const tl = targetLang || this.getTargetLanguageInfo().code;
+    const langInfo = this.getSupportedLanguages().find((l) => l.code === tl) || this.getTargetLanguageInfo();
+    const activeModel = this.getActiveModel();
+    const provider = this.getModelProvider(activeModel);
+
+    // When the active model has a verified API key, use it for contextual scholarly translation!
+    if (this.isProviderVerified(provider)) {
+      try {
+        const transPrompt = `당신은 세계 최고 수준의 학술 논문 번역가입니다. 아래 학술 본문 텍스트를 ${langInfo.label}로 정확하고 매끄럽게 번역하세요.
+[규칙]
+1. 수식($...$, $$...$$, \\[...\\]), 기호, 인용 표기, 특수 토큰(⟦M0⟧ 등)은 형태를 원본 그대로 보존하세요.
+2. 학술 전문 용어는 국내 학계 표준 용어로 충실히 번역하세요.
+3. 부가적인 해설이나 인사말 없이 오직 번역문 내용만 출력하세요.
+
+[원문]:
+${text}`;
+
+        const translated = await this.callActiveAIModel(transPrompt, {
+          systemInstruction: `학술 논문 전문 번역가로서 LaTeX 표기 및 특수 토큰을 보존하여 ${langInfo.label}로 번역문만을 출력합니다.`
+        });
+
+        if (translated && translated.trim()) {
+          return translated.trim();
+        }
+      } catch (err) {
+        console.warn("Active AI model translation fallback to neural translate chunk:", err);
+      }
+    }
+
+    // High-speed fallback
+    return await this.callNeuralTranslateChunk(text, tl);
+  }
+
   async translateText(text, targetLang = null) {
     const tl = targetLang || this.getTargetLanguageInfo().code;
     const raw = String(text || "").trim();
@@ -322,14 +569,14 @@ class MoonlightAIService {
       if (buf.trim()) chunks.push(buf.trim());
       const translatedChunks = [];
       for (const ch of chunks) {
-        translatedChunks.push(await this.callNeuralTranslateChunk(ch, tl));
+        translatedChunks.push(await this.translateWithActiveModel(ch, tl));
       }
       const finalLong = this.restoreAcademicTokens(translatedChunks.join(" "), tokens);
       this.translationCache.set(cacheKey, finalLong);
       return finalLong;
     }
 
-    const translated = await this.callNeuralTranslateChunk(masked, tl);
+    const translated = await this.translateWithActiveModel(masked, tl);
     const restored = this.restoreAcademicTokens(translated, tokens);
     this.translationCache.set(cacheKey, restored);
     return restored;
@@ -715,18 +962,11 @@ class MoonlightAIService {
 
     if (this.hasApiKey() && base64Raw) {
       try {
-        const multimodalInput = [
-          {
-            type: "text",
-            text: `현재 읽고 있는 논문: "${paper?.title || "업로드된 학술 문서"}"\n캡처 영역 내 추출 텍스트: "${extractedText || "이미지 영역"}"\n\n사용자가 마우스 드래그(바운딩 박스)로 캡처한 논문 영역 이미지입니다 (${lang.label}로 답변).\n1) 그림(Figure)/표(Table)라면 축, 구성 요소, 실험적 추세 및 핵심 시사점을 상세히 설명해 주세요.\n2) 수식(Equation)이 포함되어 있다면 정확한 LaTeX 코드를 $$...$$ 블록으로 복원하고 각 기호의 의미를 설명해 주세요.${combinedGuidance ? `\n\n${combinedGuidance}` : ""}`
-          },
-          {
-            type: "image",
-            data: base64Raw,
-            mime_type: "image/png"
-          }
-        ];
-        const aiText = await this.callGeminiInteractionsAPI(multimodalInput, combinedGuidance);
+        const prompt = `현재 읽고 있는 논문: "${paper?.title || "업로드된 학술 문서"}"\n캡처 영역 내 추출 텍스트: "${extractedText || "이미지 영역"}"\n\n사용자가 마우스 드래그(바운딩 박스)로 캡처한 논문 영역 이미지입니다 (${lang.label}로 답변).\n1) 그림(Figure)/표(Table)라면 축, 구성 요소, 실험적 추세 및 핵심 시사점을 상세히 설명해 주세요.\n2) 수식(Equation)이 포함되어 있다면 정확한 LaTeX 코드를 $$...$$ 블록으로 복원하고 각 기호의 의미를 설명해 주세요.${combinedGuidance ? `\n\n${combinedGuidance}` : ""}`;
+        const aiText = await this.callActiveAIModel(prompt, {
+          systemInstruction: this.buildSystemInstruction(combinedGuidance),
+          imageBase64: base64Raw
+        });
         const latexMatch = aiText.match(/\$\$([\s\S]+?)\$\$/) || aiText.match(/\$([^\$\n]+?)\$/);
         return {
           markdown: aiText,
@@ -734,7 +974,7 @@ class MoonlightAIService {
           isDisplayMath: true
         };
       } catch (err) {
-        console.warn("Multimodal Gemini fallback to neural analyzer:", err);
+        console.warn("Active AI model vision analysis fallback:", err);
       }
     }
 
@@ -804,9 +1044,11 @@ class MoonlightAIService {
         } else if (action === "summarize") {
           taskPrompt = `[논문 맥락]\n${paperContext}\n\n[선택한 구절]\n"${cleanText}"\n\n위 내용을 ${lang.label}로 핵심 불릿 포인트 3개로 요약해 주세요.${prompts.threeLinePrompt ? `\n[3줄 요약 지침]: ${prompts.threeLinePrompt}` : ""}`;
         }
-        return await this.callGeminiInteractionsAPI(taskPrompt, combinedGuidance);
+        return await this.callActiveAIModel(taskPrompt, {
+          systemInstruction: this.buildSystemInstruction(combinedGuidance)
+        });
       } catch (e) {
-        console.warn("Gemini API fallback to built-in neural translator:", e);
+        console.warn("Active AI model selection analysis fallback:", e);
       }
     }
 
@@ -876,7 +1118,22 @@ class MoonlightAIService {
    * Multi-turn Chat in the '토론 (Discussion)' section honoring System Prompt & Preferred Language
    */
 
-  async callOpenAIChatAPI(model, apiKey, prompt) {
+  async callOpenAIChatAPI(model, apiKey, prompt, customSys = "", imageBase64 = null) {
+    const messages = [
+      { role: "system", content: customSys || this.buildSystemInstruction() }
+    ];
+    if (imageBase64) {
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${imageBase64}` } }
+        ]
+      });
+    } else {
+      messages.push({ role: "user", content: prompt });
+    }
+
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -885,10 +1142,7 @@ class MoonlightAIService {
       },
       body: JSON.stringify({
         model: model,
-        messages: [
-          { role: "system", content: this.buildSystemInstruction() },
-          { role: "user", content: prompt }
-        ],
+        messages: messages,
         temperature: 0.7
       })
     });
@@ -900,7 +1154,20 @@ class MoonlightAIService {
     return data.choices?.[0]?.message?.content || "응답이 없습니다.";
   }
 
-  async callClaudeMessagesAPI(model, apiKey, prompt) {
+  async callClaudeMessagesAPI(model, apiKey, prompt, customSys = "", imageBase64 = null) {
+    const userContent = [];
+    if (imageBase64) {
+      userContent.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: "image/png",
+          data: imageBase64
+        }
+      });
+    }
+    userContent.push({ type: "text", text: prompt });
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -912,9 +1179,9 @@ class MoonlightAIService {
       body: JSON.stringify({
         model: model,
         max_tokens: 2048,
-        system: this.buildSystemInstruction(),
+        system: customSys || this.buildSystemInstruction(),
         messages: [
-          { role: "user", content: prompt }
+          { role: "user", content: userContent }
         ]
       })
     });
@@ -926,47 +1193,185 @@ class MoonlightAIService {
     return data.content?.[0]?.text || "응답이 없습니다.";
   }
 
+  /**
+   * Intelligently classify user intent into 3 distinct categories:
+   * 1. 'curiosity': 직관적 호기심 탐구 ("왜?", "쉽게 비유로", "어디에 쓰이나요?")
+   * 2. 'general': 연구 확장 및 거시 질의 (트렌드, 다른 모델 비교, 향후 전망)
+   * 3. 'paper': 논문 본문의 방법론, 수식, 실험, 한계점 직접 질의
+   */
+  classifyUserIntent(userMessage) {
+    const q = (userMessage || "").toLowerCase();
+
+    const curiosityKeywords = [
+      "왜", "어째서", "쉽게", "비유", "초보", "입문", "일상", "실생활", "어디에 쓰",
+      "궁금", "재밌", "호기심", "간단히", "쉬운", "이해하기 쉽게", "동화", "어린이",
+      "초등학생", "한마디로", "상식", "why", "simple", "analogy", "intuitive", "beginner", "curious"
+    ];
+
+    const generalKeywords = [
+      "전망", "미래", "트렌드", "역사", "비교", "윤리", "산업", "다른 모델", "시장",
+      "대체", "생각해", "어떻게 봐", "생태계", "앞으로", "일자리", "영향", "투자",
+      "경쟁", "대안", "trend", "future", "ecosystem", "compare", "industry", "market", "perspective"
+    ];
+
+    for (const kw of curiosityKeywords) {
+      if (q.includes(kw)) return "curiosity";
+    }
+
+    for (const kw of generalKeywords) {
+      if (q.includes(kw)) return "general";
+    }
+
+    return "paper";
+  }
+
+  /**
+   * Generates 3 paper-tailored recommended questions inferred by the selected AI model
+   */
+  async inferRecommendedQuestions(paper, activeModel = null) {
+    if (!paper) return [];
+    const model = activeModel || this.getActiveModel();
+    const provider = this.getModelProvider(model);
+    const lang = this.getTargetLanguageInfo();
+
+    if (this.isProviderVerified(provider)) {
+      try {
+        const prompt = `현재 열람 중인 논문 정보:
+- 제목: "${paper.title}"
+- 초록: "${paper.abstractEn || paper.summaryText || ""}"
+- 주요 키워드: ${(paper.keywordsList || []).join(", ")}
+
+당신은 연구자를 돕는 전문 AI 모델(${this.getModelDisplayName(model)})입니다.
+현재 열려 있는 논문을 분석·추론하여, 연구자가 논문의 본질과 핵심 기여를 파악할 수 있는 '추천 질문 3가지'를 생성하세요:
+1. 논문의 핵심 가설/방법론/아키텍처의 작동 원리와 독창성에 관한 질문
+2. 베이스라인 대비 실험적 성능, 검증 데이터셋, 또는 발견점에 관한 질문
+3. 본 연구의 실질적 한계점, 가정(Assumption), 또는 향후 후속 연구 과제에 관한 질문
+
+질문은 반드시 ${lang.label} 언어로 작성하고, 다른 설명 없이 정확히 JSON 문자열 배열 형식으로만 응답하세요:
+["질문 1", "질문 2", "질문 3"]`;
+
+        const reply = await this.callActiveAIModel(prompt, {
+          systemInstruction: "학술 연구자를 위한 깊이 있는 논문 탐색 질문 3가지를 JSON 배열 형식으로만 추출하는 전문가입니다."
+        });
+
+        const jsonMatch = reply.match(/\[\s*"[\s\S]*?"\s*,\s*"[\s\S]*?"\s*,\s*"[\s\S]*?"\s*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed) && parsed.length >= 3) {
+            return parsed.slice(0, 3).map((q) => String(q).trim());
+          }
+        }
+      } catch (e) {
+        console.warn("inferRecommendedQuestions API failed, falling back to heuristics:", e);
+      }
+    }
+
+    // Heuristic fallbacks customized with paper's metadata
+    const title = paper.title || "본 논문";
+    const kw1 = (paper.keywordsList && paper.keywordsList[0]) || "제안 방법론";
+    const kw2 = (paper.keywordsList && paper.keywordsList[1]) || "실험 성능";
+    return [
+      `《${title}》에서 제안한 ${kw1}의 핵심 작동 원리와 독창성은 무엇인가요?`,
+      `기존 연구 및 베이스라인 대비 ${kw2} 측면에서 어떠한 차별적 성과를 입증했나요?`,
+      `이 연구의 실질적인 적용 한계점과 후속 연구로 다루어야 할 과제는 무엇인가요?`
+    ];
+  }
+
+  /**
+   * Active AI Model analyzes candidate related papers and generates deep recommendation insights
+   */
+  async analyzeAndRankRelatedPapers(paper, candidatePapers = [], activeModel = null) {
+    if (!paper || !candidatePapers || candidatePapers.length === 0) return candidatePapers;
+    const model = activeModel || this.getActiveModel();
+    const provider = this.getModelProvider(model);
+    const modelName = this.getModelDisplayName(model);
+
+    if (this.isProviderVerified(provider)) {
+      try {
+        const paperSummaries = candidatePapers.slice(0, 5).map((p, idx) => `[${idx + 1}] 제목: "${p.title}" / 저자: ${p.authorsStr || p.authors} / 요약: ${(p.abstract || p.summary || "").slice(0, 150)}`).join("\n");
+        const prompt = `기준 논문: "${paper.title}" (키워드: ${(paper.keywordsList || []).join(", ")})
+
+추천 후보 논문 목록:
+${paperSummaries}
+
+당신은 연구자를 돕는 AI 모델(${modelName})입니다.
+각 후보 논문이 기준 논문과 어떤 학술적 연관성을 갖는지, 왜 읽어볼 가치가 있는지 1문장 맞춤 추천 소견을 작성해 주세요.
+반드시 아래와 같은 JSON 배열 형식으로만 응답하세요:
+[
+  { "index": 1, "aiReason": "이 논문은 기준 논문의 [핵심 방법론]을 대규모 환경으로 확장한 연구로, 실무적 구현 시 필독할 가치가 있습니다." }
+]`;
+
+        const reply = await this.callActiveAIModel(prompt, {
+          systemInstruction: "학술 문헌 추천 분석가로서 각 논문의 상호 연관성과 추천 소견을 JSON으로 제공합니다."
+        });
+
+        const jsonMatch = reply.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return candidatePapers.map((p, idx) => {
+            const found = parsed.find((item) => item.index === idx + 1);
+            return {
+              ...p,
+              aiReason: found?.aiReason || p.summary || "주제 연관 핵심 추천 논문입니다.",
+              recommendedByModel: modelName
+            };
+          });
+        }
+      } catch (e) {
+        console.warn("AI related papers analysis fallback:", e);
+      }
+    }
+
+    return candidatePapers.map((p) => ({
+      ...p,
+      aiReason: `《${paper.title}》의 핵심 주제(${(paper.keywordsList || [])[0] || '관련 연구'})와 학술적 맥락을 공유하는 주요 문헌입니다.`,
+      recommendedByModel: modelName
+    }));
+  }
+
   async chat(userMessage, paper, attachedContext = null, extraRefPapers = []) {
     const lang = this.getTargetLanguageInfo();
     const prompts = window.researchDB?.getPromptSettings() || {};
 
     const activeModel = this.getActiveModel();
     const provider = this.getModelProvider(activeModel);
+    const modelName = this.getModelDisplayName(activeModel);
+    const intentType = this.classifyUserIntent(userMessage);
+
     const refNames = extraRefPapers.length > 0 ? `\n[추가 참고 논문]: ${extraRefPapers.join(", ")}` : "";
     const contextStr = attachedContext ? `\n[선택된 논문 구절]: "${attachedContext}"` : "";
     const paperHeader = paper
       ? `현재 논문: "${paper.title}" (${(paper.authors || []).join(", ")}, ${paper.year})\n초록: ${paper.abstractEn}\n요약: ${paper.summaryText}`
       : "현재 열려 있는 논문이 없는 초기 상태입니다. 사용자의 학술/연구 질문에 친절히 답변하세요.";
-    const fullPrompt = `${paperHeader}${refNames}${contextStr}\n\n[질문 (${lang.label}로 답변)]: ${userMessage}`;
 
-    // 1. OpenAI GPT Provider
-    if (provider === "openai") {
-      const openaiKey = localStorage.getItem("research_studio_openai_key") || window.researchDB?.getAppSettings()?.openaiApiKey;
-      if (openaiKey && openaiKey.trim()) {
-        try {
-          return await this.callOpenAIChatAPI(activeModel, openaiKey.trim(), fullPrompt);
-        } catch (e) {
-          console.warn("OpenAI API chat fallback:", e);
-        }
-      }
-    } else if (provider === "claude") {
-      // 2. Anthropic Claude Provider
-      const claudeKey = localStorage.getItem("research_studio_claude_key") || window.researchDB?.getAppSettings()?.claudeApiKey;
-      if (claudeKey && claudeKey.trim()) {
-        try {
-          return await this.callClaudeMessagesAPI(activeModel, claudeKey.trim(), fullPrompt);
-        } catch (e) {
-          console.warn("Claude API chat fallback:", e);
-        }
-      }
-    } else {
-      // 3. Google Gemini Provider
-      if (this.hasApiKey()) {
-        try {
-          return await this.callGeminiInteractionsAPI(fullPrompt, "", true);
-        } catch (e) {
-          console.warn("Gemini API chat fallback:", e);
-        }
+    const intentPromptGuide = `[사용자 질문 의도 자동 파악 및 맞춤 응답 지침]
+당신은 연구자를 돕는 전문 AI 모델(${modelName})입니다.
+사용자의 질문("${userMessage}")을 읽고 질문의 의도를 다음 3가지 유형 중 하나로 스스로 파악·분류하여 가장 알맞은 형식으로 답변하세요:
+
+1. [논문 심층 질의]: 현재 논문 《${paper?.title || ""}》의 본문, 방법론, 수식, 데이터셋, 실험 결과, 한계점에 대한 직접적인 학술 질문
+   -> 논문 본문 및 초록을 엄밀한 근거로 삼아 전문적이고 명확하게 설명.
+2. [직관적 호기심 탐구]: "왜 이 연구를 하지?", "쉽게 비유로 알려줘", "일상생활 어디에 쓰이나요?" 등 단순 호기심/개념 이해 질문
+   -> 어려운 학술 용어를 쉬운 일상 비유와 직관, 실생활 예시로 풀어 호기심을 완벽히 해소.
+3. [연구 확장 및 거시 질의]: 연구 분야 트렌드, 다른 기술과의 비교, 향후 전망, 산업 생태계 영향 등 확장 질문
+   -> 넓은 학술 및 기술 생태계 맥락에서 균형 잡힌 통찰력과 비교 관점을 제시.
+
+[필수 출력 형식]
+답변의 첫 번째 줄은 반드시 파악한 의도에 맞는 인용 블록 뱃지로 시작하세요:
+- 논문 질의: > **🎯 [질문 의도 파악: 논문 심층 질의]** 논문 본문의 구체적 근거를 바탕으로 분석합니다.
+- 호기심 질의: > **💡 [질문 의도 파악: 직관적 호기심 탐구]** 핵심 개념을 알기 쉬운 일상 비유와 직관으로 풀어냅니다.
+- 확장/기타 질의: > **🌐 [질문 의도 파악: 연구 확장 및 거시 질의]** 학술 분야 전반의 맥락과 통찰을 바탕으로 답변합니다.
+그 뒤 빈 줄 1개를 두고, ${lang.label} 언어로 정돈된 마크다운 본문을 작성하세요.`;
+
+    const fullPrompt = `${paperHeader}${refNames}${contextStr}\n\n${intentPromptGuide}\n\n[사용자 질문]: ${userMessage}`;
+
+    // Execute active model if verified
+    if (this.isProviderVerified(provider)) {
+      try {
+        return await this.callActiveAIModel(fullPrompt, {
+          systemInstruction: this.buildSystemInstruction(intentPromptGuide)
+        });
+      } catch (e) {
+        console.warn(`${provider} API chat fallback:`, e);
       }
     }
 
@@ -979,12 +1384,36 @@ class MoonlightAIService {
 
     if (attachedContext) {
       const ctxTranslated = await this.translateText(attachedContext, lang.code);
-      const replyKo = `선택하신 구절에 대한 **${this.getModelDisplayName()}** 분석입니다:\n\n> **번역:** ${ctxTranslated}\n\n**질문("${userMessage}")에 대한 답변:**\n해당 구절은 **《${paper.title}》**의 핵심 논거와 직접 연결됩니다. ${paper.threeLineSummary?.[0] || ""}${
+      const replyKo = `선택하신 구절에 대한 **${modelName}** 분석입니다:\n\n> **번역:** ${ctxTranslated}\n\n**질문("${userMessage}")에 대한 답변:**\n해당 구절은 **《${paper.title}》**의 핵심 논거와 직접 연결됩니다. ${paper.threeLineSummary?.[0] || ""}${
         prompts.systemPrompt?.trim() ? `\n\n*(시스템 프롬프트 반영: "${prompts.systemPrompt.trim()}")*` : ""
       }`;
       return lang.code === "ko" ? replyKo : await this.translateText(replyKo, lang.code);
     }
 
+    // Heuristic Intent-Tailored Responses
+    if (intentType === "curiosity") {
+      const badge = `> **💡 [질문 의도 파악: 직관적 호기심 탐구]** 핵심 개념을 알기 쉬운 일상 비유와 직관으로 풀어냅니다.\n\n`;
+      return badge + `질문하신 **"${userMessage}"**에 대한 직관적인 해설입니다.\n\n` +
+        `**💡 일상 비유로 이해하기:**\n` +
+        `**《${paper.title}》**의 연구는 마치 수많은 자료 중에서 가장 신뢰할 수 있는 핵심 단서만을 빠르게 찾아내는 '스마트 네비게이션'과 같습니다. ${paper.threeLineSummary?.[0] || ""}\n\n` +
+        `**✨ 실생활/응용 시사점:**\n` +
+        `이 기술이 발전하면 우리는 일상에서 복잡한 학술 지식이나 대규모 데이터를 일일이 분석하지 않고도 핵심 통찰을 손쉽게 얻을 수 있습니다.\n\n` +
+        `> **핵심 한 줄 요약:** ${paper.threeLineSummary?.[1] || paper.summaryText}`;
+    }
+
+    if (intentType === "general") {
+      const badge = `> **🌐 [질문 의도 파악: 연구 확장 및 거시 질의]** 학술 분야 전반의 맥락과 통찰을 바탕으로 답변합니다.\n\n`;
+      return badge + `질문하신 **"${userMessage}"**는 본 연구 주제의 거시적 맥락과 미래 방향을 짚는 중요한 질문입니다.\n\n` +
+        `**1. 학술 트렌드 및 기술 생태계:**\n` +
+        `현재 **${(paper.keywordsList || []).slice(0, 3).join(", ") || "인공지능 및 학술 연구"}** 분야는 단편적 기술 검증 단계를 지나 실제 복합 환경에서의 신뢰성과 확장성(Scalability)을 확보하는 방향으로 진화하고 있습니다.\n\n` +
+        `**2. 본 연구의 위치와 비교 관점:**\n` +
+        `본 논문 **《${paper.title}》**은 ${paper.threeLineSummary?.[1] || "방법론적 개선"}을 통해 기존 학계의 주요 병목을 해소하는 역할을 합니다.\n\n` +
+        `**3. 향후 발전 전망:**\n` +
+        `앞으로 유사 연구들은 더 다양한 모달리티와 결합하거나 더 적은 계산 자원으로 대규모 지식을 다루는 방향으로 연구 지평이 넓어질 것으로 기대됩니다.`;
+    }
+
+    // Default: 'paper' (논문 심층 질의)
+    const badge = `> **🎯 [질문 의도 파악: 논문 심층 질의]** 논문 본문의 구체적 근거와 학술적 논지를 바탕으로 분석합니다.\n\n`;
     const q = userMessage.toLowerCase();
     let baseReply = "";
 
@@ -993,9 +1422,8 @@ class MoonlightAIService {
     } else if (q.includes("기존") || q.includes("달라") || q.includes("차이") || q.includes("독창성") || q.includes("novel")) {
       baseReply = `**《${paper.title}》의 연구적 차별점 및 핵심 방법론:**\n\n- **문제 정의:** ${paper.threeLineSummary?.[0] || ""}\n- **제안 방법:** ${paper.threeLineSummary?.[1] || ""}\n- **주요 성과:** ${paper.threeLineSummary?.[2] || ""}`;
     } else if (q.includes("한계") || q.includes("약점") || q.includes("향후") || q.includes("limitation")) {
-      baseReply = `**본 연구 검토 시 확인해야 할 한계점 및 후속 연구 포인트:**\n\n1. 본문에서 다룬 핵심 도메인 키워드(**${(paper.keywordsList || []).slice(0, 4).join(", ")}**) 외의 실험 조건이나 더 큰 스케일에서의 일반화 성능을 점검해 보세요.\n2. 우측 상단 **⚙️ 설정 → 기본 설정**에서 Gemini API 키를 등록하시면 전체 섹션 텍스트 기반의 심층 비평을 생성할 수 있습니다.`;
+      baseReply = `**본 연구 검토 시 확인해야 할 한계점 및 후속 연구 포인트:**\n\n1. 본문에서 다룬 핵심 도메인 키워드(**${(paper.keywordsList || []).slice(0, 4).join(", ")}**) 외의 실험 조건이나 더 큰 스케일에서의 일반화 성능을 점검해 보세요.\n2. 상단 **⚙️ 설정 → 기본 설정**에서 API 키를 등록하고 검증하시면 선택하신 ${modelName} 모델의 심층 추론 분석을 실시간으로 활용하실 수 있습니다.`;
     } else {
-      // Search most relevant paragraph in the paper for the user's question!
       const qTokens = userMessage
         .toLowerCase()
         .split(/\s+/)
@@ -1019,12 +1447,12 @@ class MoonlightAIService {
         ? await this.translateText(bestPara.slice(0, 500), lang.code)
         : paper.summaryText;
 
-      baseReply = `**AI 연구 동료 (${this.getModelDisplayName()}) 답변:**\n\n질문하신 **"${userMessage}"**와 관련하여 논문 본문에서 찾은 핵심 내용입니다:\n\n> ${relevantTrans}\n${
+      baseReply = `질문하신 **"${userMessage}"**와 관련하여 논문 본문에서 찾은 핵심 내용입니다:\n\n> ${relevantTrans}\n${
         prompts.systemPrompt?.trim() ? `\n*(맞춤 시스템 프롬프트 적용됨: ${prompts.systemPrompt.trim()})*` : ""
       }${extraRefPapers.length > 0 ? `\n📎 *첨부 참고 논문: ${extraRefPapers.join(", ")}*` : ""}`;
     }
 
-    return baseReply;
+    return badge + baseReply;
   }
 
   /**

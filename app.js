@@ -1307,6 +1307,9 @@ class MoonlightApp {
     this.renderSummarySection();
     this.renderDiscussionSection();
     this.renderBottomPromptChips();
+    if (this.currentPaper) {
+      this.generateModelRecommendedQuestions();
+    }
   }
 
   renderKeywordSection() {
@@ -1520,30 +1523,90 @@ class MoonlightApp {
 
   renderBottomPromptChips() {
     const container = document.getElementById("bottom-prompt-chips");
+    const label = document.getElementById("suggested-questions-source-label");
     if (!container) return;
 
+    const activeModelName = window.moonlightAI ? window.moonlightAI.getModelDisplayName() : "AI";
+
     if (!this.currentPaper) {
-      container.innerHTML = "";
+      if (label) label.textContent = `${activeModelName}의 추천 질문`;
+      container.innerHTML = `
+        <button onclick="app.askSuggestedQuestion('이 플랫폼의 핵심 기능과 논문 분석 방법을 알려줘')"
+                class="px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-[#1e1e26] hover:bg-indigo-500/15 border border-zinc-200 dark:border-zinc-700/80 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 whitespace-nowrap transition shrink-0">
+          ✨ 플랫폼 사용법 및 핵심 기능 질문
+        </button>
+      `;
       return;
     }
 
-    const chips = this.currentPaper.suggestedQuestions || [
-      "이 논문의 핵심이 뭐야?",
-      "기존 연구랑 뭐가 달라?",
-      "한계점이 뭐야?"
-    ];
+    if (label) {
+      label.innerHTML = `✦ <strong class="text-zinc-800 dark:text-zinc-100">${this.escapeHtml(activeModelName)}</strong>의 논문 추론 추천 질문 (3가지)`;
+    }
+
+    const chips = (this.currentPaper.suggestedQuestions && this.currentPaper.suggestedQuestions.length >= 3)
+      ? this.currentPaper.suggestedQuestions.slice(0, 3)
+      : this.getDefaultPaperSuggestedQuestions(this.currentPaper);
 
     container.innerHTML = chips
-      .slice(0, 3)
       .map(
-        (q) => `
+        (q, idx) => `
         <button onclick="app.askSuggestedQuestion('${this.escapeAttr(q)}')"
-                class="px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-[#1e1e26] hover:bg-indigo-500/15 hover:border-indigo-500/40 border border-zinc-200 dark:border-zinc-700/80 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 whitespace-nowrap transition shrink-0">
-          ${this.escapeHtml(q)}
+                title="클릭하여 질문하기: ${this.escapeAttr(q)}"
+                class="group/chip px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-[#1e1e26] hover:bg-indigo-500/15 hover:border-indigo-500/40 border border-zinc-200 dark:border-zinc-700/80 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 whitespace-nowrap transition shrink-0 flex items-center gap-1.5 shadow-xs">
+          <span class="w-3.5 h-3.5 rounded-full bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9.5px] font-bold flex items-center justify-center shrink-0">Q${idx + 1}</span>
+          <span class="group-hover/chip:text-indigo-600 dark:group-hover/chip:text-indigo-300 transition-colors">${this.escapeHtml(q)}</span>
         </button>
       `
       )
       .join("");
+  }
+
+  getDefaultPaperSuggestedQuestions(paper) {
+    if (!paper) return ["이 논문의 핵심이 뭐야?", "기존 연구랑 뭐가 달라?", "한계점이 뭐야?"];
+    const title = paper.title || "본 논문";
+    const kw1 = (paper.keywordsList && paper.keywordsList[0]) || "제안 방법론";
+    const kw2 = (paper.keywordsList && paper.keywordsList[1]) || "실험 성능";
+    return [
+      `《${title}》에서 제안한 ${kw1}의 핵심 작동 원리와 독창성은 무엇인가요?`,
+      `기존 연구 및 베이스라인 대비 ${kw2} 측면에서 어떠한 차별적 성과를 입증했나요?`,
+      `이 연구의 실질적인 적용 한계점과 후속 연구로 다루어야 할 과제는 무엇인가요?`
+    ];
+  }
+
+  async generateModelRecommendedQuestions(force = false) {
+    if (!this.currentPaper) {
+      this.renderBottomPromptChips();
+      return;
+    }
+
+    const activeModel = window.moonlightAI?.getActiveModel() || "gemini-3.1-flash-lite";
+    const cacheKey = `${this.currentPaper.id}__${activeModel}`;
+
+    if (!force && this.paperModelQuestionCache && this.paperModelQuestionCache[cacheKey]) {
+      this.currentPaper.suggestedQuestions = this.paperModelQuestionCache[cacheKey];
+      this.renderBottomPromptChips();
+      return;
+    }
+
+    // 1. Immediate default questions for instant UX
+    this.currentPaper.suggestedQuestions = this.getDefaultPaperSuggestedQuestions(this.currentPaper);
+    this.renderBottomPromptChips();
+
+    // 2. In background, infer questions from the active model if verified
+    const provider = window.moonlightAI?.getModelProvider(activeModel);
+    if (window.moonlightAI?.isProviderVerified(provider)) {
+      try {
+        const inferred = await window.moonlightAI.inferRecommendedQuestions(this.currentPaper, activeModel);
+        if (inferred && inferred.length >= 3) {
+          this.paperModelQuestionCache = this.paperModelQuestionCache || {};
+          this.paperModelQuestionCache[cacheKey] = inferred;
+          this.currentPaper.suggestedQuestions = inferred;
+          this.renderBottomPromptChips();
+        }
+      } catch (err) {
+        console.warn("AI recommended questions inference fallback:", err);
+      }
+    }
   }
 
   // ================= ACCORDION, COPY & REFRESH ACTIONS =================
@@ -1609,13 +1672,7 @@ class MoonlightApp {
 
   cycleRandomSuggestedPrompt() {
     if (!this.requireActivePaper("추천 질문")) return;
-    const prompts = this.currentPaper.suggestedQuestions || [
-      "이 논문의 핵심이 뭐야?",
-      "기존 연구랑 뭐가 달라?",
-      "한계점이 뭐야?"
-    ];
-    const randomQ = prompts[Math.floor(Math.random() * prompts.length)];
-    this.askSuggestedQuestion(randomQ);
+    this.generateModelRecommendedQuestions(true);
   }
 
   async handleChatSubmit(event) {
@@ -2158,15 +2215,20 @@ class MoonlightApp {
     }
 
     const titleEl = document.getElementById("rel-card-title");
-    if (titleEl) titleEl.textContent = "실시간 추천 분석 중...";
+    const activeModelName = window.moonlightAI?.getModelDisplayName() || "주 AI 모델";
+    if (titleEl) titleEl.textContent = `${activeModelName} 추천 분석 중...`;
 
     const recs = await window.scholarAPI.fetchRelatedRecommendations(this.currentPaper, 5);
     if (recs && recs.length > 0) {
-      this.relatedPapers = recs.map((r) => ({
-        ...r,
-        authors: r.authorsStr || (Array.isArray(r.authors) ? r.authors.join(", ") : r.authors || ""),
-        summary: r.summary || (r.abstract ? r.abstract.slice(0, 200) + "..." : "")
-      }));
+      if (window.moonlightAI && typeof window.moonlightAI.analyzeAndRankRelatedPapers === "function") {
+        this.relatedPapers = await window.moonlightAI.analyzeAndRankRelatedPapers(this.currentPaper, recs);
+      } else {
+        this.relatedPapers = recs.map((r) => ({
+          ...r,
+          authors: r.authorsStr || (Array.isArray(r.authors) ? r.authors.join(", ") : r.authors || ""),
+          summary: r.summary || (r.abstract ? r.abstract.slice(0, 200) + "..." : "")
+        }));
+      }
     }
     this.updateSidebarRelatedCardUI();
   }
@@ -2177,6 +2239,14 @@ class MoonlightApp {
       return;
     }
 
+    const activeModelName = window.moonlightAI?.getModelDisplayName() || "선택된 주 AI 모델";
+    const headerBanner = `
+      <div class="p-3 mb-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 flex items-center gap-2.5 text-xs text-indigo-900 dark:text-indigo-200">
+        <span class="text-base shrink-0">✦</span>
+        <span>주 AI 엔진 <strong>[${this.escapeHtml(activeModelName)}]</strong>이(가) 현재 열람 중인 논문의 핵심 방법론과 가설을 다각도로 분석하여 엄선한 추천 논문 목록입니다.</span>
+      </div>
+    `;
+
     const html = this.relatedPapers
       .map(
         (rp) => `
@@ -2185,10 +2255,11 @@ class MoonlightApp {
             <span class="px-2 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-300 font-bold text-xs">
               일치율 ${this.escapeHtml(rp.matchRate || "85%")} · ${this.escapeHtml(rp.recommendLabel || "추천")}
             </span>
-            <span class="text-xs text-zinc-400">${this.escapeHtml(rp.venue)} (${rp.year})</span>
+            <span class="text-xs text-zinc-400">${this.escapeHtml(rp.venue || "학술지")} (${rp.year || ""})</span>
           </div>
           <h4 class="font-bold text-sm text-zinc-900 dark:text-white">${this.escapeHtml(rp.title)}</h4>
           <p class="text-xs text-zinc-500">${this.escapeHtml(Array.isArray(rp.authors) ? rp.authors.join(", ") : rp.authors)}</p>
+          ${rp.aiRationale ? `<div class="p-2.5 rounded-lg bg-indigo-50/60 dark:bg-indigo-900/20 text-xs text-indigo-700 dark:text-indigo-300 font-medium">💡 <strong>${this.escapeHtml(activeModelName)} 선정 근거:</strong> ${this.escapeHtml(rp.aiRationale)}</div>` : ""}
           <p class="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">${this.escapeHtml(rp.summary || rp.abstract || "")}</p>
           <div class="pt-1 flex justify-end gap-2">
             <button onclick="app.openExploreModal('${this.escapeAttr(rp.title)}')"
@@ -2207,8 +2278,8 @@ class MoonlightApp {
 
     this.openUniversalModal(
       "AI 관련 논문 추천",
-      `맞춤 추천 문헌 (${this.relatedPapers.length}편)`,
-      `<div class="space-y-3">${html}</div>`
+      `${activeModelName} 맞춤 추천 문헌 (${this.relatedPapers.length}편)`,
+      `<div>${headerBanner}<div class="space-y-3">${html}</div></div>`
     );
   }
 
@@ -3616,10 +3687,16 @@ class MoonlightApp {
     const openaiKey = localStorage.getItem("research_studio_openai_key") || s.openaiApiKey || "";
     const claudeKey = localStorage.getItem("research_studio_claude_key") || s.claudeApiKey || "";
 
+    const isVerified = {
+      gemini: window.moonlightAI ? window.moonlightAI.isProviderVerified("gemini") : false,
+      openai: window.moonlightAI ? window.moonlightAI.isProviderVerified("openai") : false,
+      claude: window.moonlightAI ? window.moonlightAI.isProviderVerified("claude") : false
+    };
+
     return {
-      gemini: true,
-      openai: Boolean(openaiKey && openaiKey.trim().length > 3) || true,
-      claude: Boolean(claudeKey && claudeKey.trim().length > 3),
+      gemini: isVerified.gemini,
+      openai: isVerified.openai,
+      claude: isVerified.claude,
       hasCustomKey: {
         gemini: Boolean(geminiKey && geminiKey.trim().length > 5),
         openai: Boolean(openaiKey && openaiKey.trim().length > 5),
@@ -3653,7 +3730,6 @@ class MoonlightApp {
 
     const catalog = this.getAiModelCatalog();
     const currentModelId = window.moonlightAI?.getActiveModel() || "gemini-3.1-flash-lite";
-    const apis = this.getUserConfiguredApis();
 
     const groups = [
       { provider: "gemini", items: catalog.filter((m) => m.provider === "gemini") },
@@ -3668,26 +3744,24 @@ class MoonlightApp {
       }
       group.items.forEach((model) => {
         const isSelected = model.id === currentModelId;
-        let isAvailable = false;
-        if (model.provider === "gemini") {
-          isAvailable = model.id === "gemini-3.1-flash-lite" || model.id === "gemini-2.5-flash" || apis.hasCustomKey.gemini;
-        } else if (model.provider === "openai") {
-          isAvailable = model.id === "gpt-5-nano" || model.id === "gpt-4o-mini" || apis.hasCustomKey.openai;
-        } else if (model.provider === "claude") {
-          isAvailable = apis.hasCustomKey.claude;
-        }
+        const isAvailable = window.moonlightAI
+          ? window.moonlightAI.isProviderVerified(model.provider)
+          : false;
 
         const textColor = isAvailable
           ? "text-zinc-900 dark:text-zinc-100 font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80"
-          : "text-zinc-400 dark:text-zinc-500 font-normal hover:bg-zinc-50 dark:hover:bg-zinc-800/40";
+          : "text-zinc-400 dark:text-zinc-500 font-normal hover:bg-zinc-50 dark:hover:bg-zinc-800/40 opacity-75";
 
         html += `
           <div onclick="app.selectAiModel('${model.id}', ${isAvailable})"
                class="px-3 py-1.5 rounded-xl cursor-pointer flex flex-col justify-center transition select-none ${textColor}">
             <div class="flex items-center justify-between">
-              <span class="text-[13px] leading-tight">${this.escapeHtml(model.name)}</span>
+              <span class="text-[13px] leading-tight flex items-center gap-1.5">
+                <span>${this.escapeHtml(model.name)}</span>
+                ${!isAvailable ? '<span class="text-[9.5px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500">인증 필요</span>' : ''}
+              </span>
               ${isSelected ? `
-                <svg class="w-4 h-4 text-zinc-800 dark:text-zinc-100 stroke-current fill-none stroke-2 shrink-0 ml-2" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400 stroke-current fill-none stroke-2 shrink-0 ml-2" viewBox="0 0 24 24">
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               ` : ''}
@@ -3710,7 +3784,9 @@ class MoonlightApp {
     const model = catalog.find((m) => m.id === modelId);
     if (!model) return;
 
-    if (!isAvailable) {
+    const isVerified = window.moonlightAI ? window.moonlightAI.isProviderVerified(model.provider) : false;
+
+    if (!isVerified) {
       this.closeChatModelPopover();
       this.openSettingsModal("general");
       setTimeout(() => {
@@ -3720,8 +3796,8 @@ class MoonlightApp {
         document.getElementById(targetInputId)?.focus();
       }, 200);
       this.showFloatingCard(
-        `🔑 ${model.providerName} API 키 등록 필요`,
-        `<p>선택하신 <strong>${this.escapeHtml(model.name)}</strong> 모델을 사용하려면 [기본 설정]에서 ${model.providerName} API 키를 등록해주세요.</p>`
+        `🔑 ${model.providerName} API 키 인증 필요`,
+        `<p>선택하신 <strong>${this.escapeHtml(model.name)}</strong> 모델을 활성화하려면 [설정]에서 ${model.providerName} API 키를 등록하고 유효성을 검증해주세요.</p>`
       );
       return;
     }
@@ -3730,6 +3806,11 @@ class MoonlightApp {
     window.researchDB?.saveAppSettings({ aiModel: modelId });
     this.updateModelPillUI();
     this.closeChatModelPopover();
+    this.generateModelRecommendedQuestions(true);
+    this.showFloatingCard(
+      `✦ 주 AI 모델 전환: ${model.name}`,
+      `<p>웹페이지 전반적인 기능(번역, 관련 논문 추천, 질문 의도 분석 등)을 <strong>${this.escapeHtml(model.name)}</strong> 모델이 전담하여 수행합니다.</p>`
+    );
   }
 
   // ================= MOONLIGHT FULL-SCREEN LIBRARY (Image 3) =================
@@ -3931,38 +4012,192 @@ class MoonlightApp {
     tree.innerHTML = html;
   }
 
-  saveAllApiSettings() {
+  updateProviderBadgeUI(provider, isVerified, hasKey) {
+    const badge = document.getElementById(`modal-${provider}-status`);
+    if (!badge) return;
+
+    const names = { gemini: "Gemini", openai: "GPT", claude: "Claude" };
+    const pName = names[provider] || provider;
+
+    if (isVerified) {
+      badge.textContent = `${pName} 모델군 활성화`;
+      badge.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20";
+    } else if (hasKey) {
+      badge.textContent = "인증 실패 (키 확인 필요)";
+      badge.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20";
+    } else {
+      badge.textContent = "인증 필요 (키 미입력)";
+      badge.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-200 dark:bg-zinc-800 text-zinc-500 border border-zinc-300 dark:border-zinc-700";
+    }
+  }
+
+  syncAiModelSelectOptgroups(verifiedStatus = null) {
+    const modelSelect = document.getElementById("set-ai-model-select");
+    if (!modelSelect) return;
+
+    const vStatus = verifiedStatus || (window.researchDB ? window.researchDB.getAppSettings().verifiedApis : { gemini: false, openai: false, claude: false }) || { gemini: false, openai: false, claude: false };
+
+    const groups = [
+      { id: "optgroup-gemini", provider: "gemini", baseLabel: "Google Gemini (플래그십)" },
+      { id: "optgroup-openai", provider: "openai", baseLabel: "OpenAI (GPT 모델군)" },
+      { id: "optgroup-claude", provider: "claude", baseLabel: "Anthropic Claude (심층 추론)" }
+    ];
+
+    groups.forEach((g) => {
+      const optgroup = document.getElementById(g.id);
+      const isVerified = !!vStatus[g.provider];
+      if (optgroup) {
+        optgroup.label = isVerified ? `${g.baseLabel} ✓ 활성화` : `${g.baseLabel} (미인증 - 키 검증 필요)`;
+        const options = optgroup.querySelectorAll("option");
+        options.forEach((opt) => {
+          opt.disabled = !isVerified;
+          let text = opt.textContent.replace(" (인증 필요)", "");
+          if (!isVerified) {
+            opt.textContent = `${text} (인증 필요)`;
+          } else {
+            opt.textContent = text;
+          }
+        });
+      }
+    });
+  }
+
+  async saveAllApiSettings() {
     const geminiVal = document.getElementById("modal-gemini-key")?.value?.trim() || "";
     const openaiVal = document.getElementById("modal-openai-key")?.value?.trim() || "";
     const claudeVal = document.getElementById("modal-claude-key")?.value?.trim() || "";
     const modelSelect = document.getElementById("set-ai-model-select");
+    const saveBtn = document.getElementById("btn-save-all-api");
+    const statusMsg = document.getElementById("modal-api-status-msg");
 
-    if (geminiVal) localStorage.setItem("research_studio_gemini_key", geminiVal);
-    else localStorage.removeItem("research_studio_gemini_key");
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = `
+        <svg class="animate-spin -ml-1 mr-2 h-3.5 w-3.5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        API 키 가용성 검증 중...
+      `;
+    }
 
-    if (openaiVal) localStorage.setItem("research_studio_openai_key", openaiVal);
-    else localStorage.removeItem("research_studio_openai_key");
+    if (statusMsg) {
+      statusMsg.className = "text-[11px] text-indigo-500 font-medium animate-pulse";
+      statusMsg.textContent = "AI 제공자 서버(Gemini, OpenAI, Claude)와 직접 통신하여 API 가용성을 실시간 검증하고 있습니다...";
+    }
 
-    if (claudeVal) localStorage.setItem("research_studio_claude_key", claudeVal);
-    else localStorage.removeItem("research_studio_claude_key");
-
-    localStorage.removeItem("research_studio_deepseek_key");
-
-    const selectedModel = modelSelect?.value || window.moonlightAI?.getActiveModel() || "gemini-3.1-flash-lite";
-
-    window.researchDB?.saveAppSettings({
-      geminiApiKey: geminiVal,
-      openaiApiKey: openaiVal,
-      claudeApiKey: claudeVal,
-      deepseekApiKey: "",
-      aiModel: selectedModel
+    ["gemini", "openai", "claude"].forEach((p) => {
+      const b = document.getElementById(`modal-${p}-status`);
+      if (b) {
+        b.textContent = "검증 중...";
+        b.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/20 animate-pulse";
+      }
     });
 
-    window.moonlightAI?.setConfig(geminiVal, selectedModel);
-    this.updateModelPillUI();
-    this.renderChatModelPopoverContent();
-    const modelName = window.moonlightAI?.getModelDisplayName(selectedModel) || selectedModel;
-    this.showFloatingCard("🔑 AI API 설정 및 주 모델 저장 완료", `<p>입력하신 API 키가 안전하게 저장되었으며, 주 AI 모델이 <strong>${this.escapeHtml(modelName)}</strong>(으)로 설정되었습니다.</p>`);
+    try {
+      const verificationResults = await (window.moonlightAI?.verifyAllApiKeys
+        ? window.moonlightAI.verifyAllApiKeys({ gemini: geminiVal, openai: openaiVal, claude: claudeVal })
+        : Promise.resolve({
+            gemini: !!geminiVal,
+            openai: !!openaiVal,
+            claude: !!claudeVal
+          }));
+
+      if (geminiVal) localStorage.setItem("research_studio_gemini_key", geminiVal);
+      else localStorage.removeItem("research_studio_gemini_key");
+
+      if (openaiVal) localStorage.setItem("research_studio_openai_key", openaiVal);
+      else localStorage.removeItem("research_studio_openai_key");
+
+      if (claudeVal) localStorage.setItem("research_studio_claude_key", claudeVal);
+      else localStorage.removeItem("research_studio_claude_key");
+
+      localStorage.removeItem("research_studio_deepseek_key");
+
+      this.updateProviderBadgeUI("gemini", verificationResults.gemini, !!geminiVal);
+      this.updateProviderBadgeUI("openai", verificationResults.openai, !!openaiVal);
+      this.updateProviderBadgeUI("claude", verificationResults.claude, !!claudeVal);
+      this.syncAiModelSelectOptgroups(verificationResults);
+
+      let currentRequestedModel = modelSelect?.value || window.moonlightAI?.getActiveModel() || "gemini-3.1-flash-lite";
+      let activeProvider = window.moonlightAI?.getModelProvider(currentRequestedModel) || "gemini";
+
+      if (!verificationResults[activeProvider]) {
+        if (verificationResults.gemini) {
+          currentRequestedModel = "gemini-3.1-flash-lite";
+        } else if (verificationResults.openai) {
+          currentRequestedModel = "gpt-5-mini";
+        } else if (verificationResults.claude) {
+          currentRequestedModel = "claude-3-7-sonnet";
+        } else {
+          currentRequestedModel = "gemini-3.1-flash-lite";
+        }
+      }
+
+      if (modelSelect) {
+        modelSelect.value = currentRequestedModel;
+      }
+
+      window.researchDB?.saveAppSettings({
+        geminiApiKey: geminiVal,
+        openaiApiKey: openaiVal,
+        claudeApiKey: claudeVal,
+        deepseekApiKey: "",
+        aiModel: currentRequestedModel,
+        verifiedApis: verificationResults
+      });
+
+      window.moonlightAI?.setConfig(geminiVal, currentRequestedModel);
+      this.updateModelPillUI();
+      this.renderChatModelPopoverContent();
+      this.generateModelRecommendedQuestions(true);
+
+      const verifiedList = [];
+      if (verificationResults.gemini) verifiedList.push("Gemini");
+      if (verificationResults.openai) verifiedList.push("GPT (OpenAI)");
+      if (verificationResults.claude) verifiedList.push("Claude");
+
+      if (statusMsg) {
+        if (verifiedList.length > 0) {
+          statusMsg.className = "text-[11px] text-emerald-600 dark:text-emerald-400 font-medium";
+          statusMsg.textContent = `✓ ${verifiedList.join(", ")} 모델군이 성공적으로 인증되어 활성화되었습니다.`;
+        } else {
+          statusMsg.className = "text-[11px] text-zinc-500 font-medium";
+          statusMsg.textContent = "가용 가능한 API 키가 등록되지 않았습니다. 올바른 키를 입력 후 저장해 주세요.";
+        }
+      }
+
+      const activeModelName = window.moonlightAI?.getModelDisplayName(currentRequestedModel) || currentRequestedModel;
+
+      if (verifiedList.length > 0) {
+        this.showFloatingCard(
+          "🔑 AI 모델 활성화 및 설정 저장 완료",
+          `<p>API 키가 검증되어 <strong>${verifiedList.join(", ")}</strong> 모델군이 활성화되었습니다.<br/>웹페이지 전반(번역, 추천, 분석, 질문 의도 파악)을 담당할 주 모델: <strong>${this.escapeHtml(activeModelName)}</strong></p>`
+        );
+      } else {
+        this.showFloatingCard(
+          "⚠️ API 키 미인증 상태",
+          `<p>가용 가능한 API 키가 검증되지 않아 모델들이 비활성화 상태입니다. 올바른 API 인증키를 입력하고 [API 키 모두 저장]을 눌러주세요.</p>`
+        );
+      }
+    } catch (err) {
+      console.error("API verification error:", err);
+      if (statusMsg) {
+        statusMsg.className = "text-[11px] text-rose-500 font-medium";
+        statusMsg.textContent = "API 키 검증 중 오류가 발생했습니다. 네트워크 연결 상태를 확인해 주세요.";
+      }
+      this.showFloatingCard("❌ API 검증 오류", `<p>${this.escapeHtml(err.message || "API 키 검증에 실패했습니다.")}</p>`);
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+          API 키 모두 저장
+        `;
+      }
+    }
   }
 
   openCitationsModal() {
@@ -5593,7 +5828,20 @@ class MoonlightApp {
     const claudeInput = document.getElementById("modal-claude-key");
     if (claudeInput) claudeInput.value = s.claudeApiKey || localStorage.getItem("research_studio_claude_key") || "";
 
+    const verifiedStatus = s.verifiedApis || {
+      gemini: window.moonlightAI ? window.moonlightAI.isProviderVerified("gemini") : false,
+      openai: window.moonlightAI ? window.moonlightAI.isProviderVerified("openai") : false,
+      claude: window.moonlightAI ? window.moonlightAI.isProviderVerified("claude") : false
+    };
 
+    const gKey = geminiInput ? geminiInput.value : "";
+    const oKey = openaiInput ? openaiInput.value : "";
+    const cKey = claudeInput ? claudeInput.value : "";
+
+    this.updateProviderBadgeUI("gemini", !!verifiedStatus.gemini, !!gKey);
+    this.updateProviderBadgeUI("openai", !!verifiedStatus.openai, !!oKey);
+    this.updateProviderBadgeUI("claude", !!verifiedStatus.claude, !!cKey);
+    this.syncAiModelSelectOptgroups(verifiedStatus);
 
     // --- Tab 2: 화면 설정 ---
     this.syncThemeSwitchUI();
@@ -5678,23 +5926,33 @@ class MoonlightApp {
   }
 
   changeSettingAiModel(modelId) {
+    const provider = window.moonlightAI?.getModelProvider(modelId) || "gemini";
+    const isVerified = window.moonlightAI?.isProviderVerified(provider);
+    const modelName = window.moonlightAI?.getModelDisplayName(modelId) || modelId;
+
+    if (!isVerified) {
+      this.showFloatingCard(
+        "⚠️ AI 모델 활성화 필요",
+        `<p><strong>${this.escapeHtml(modelName)}</strong> 모델은 현재 비활성화 상태입니다.<br/>하단의 [AI API 키 연결 및 관리]에서 <strong>${provider.toUpperCase()}</strong> API 인증키를 입력하고 <strong>[API 키 모두 저장]</strong>을 눌러 검증을 완료해주세요.</p>`
+      );
+      this.syncSettingsModalUI();
+      return;
+    }
+
     window.moonlightAI?.setConfig(window.moonlightAI.apiKey, modelId);
+    window.researchDB?.saveAppSettings({ aiModel: modelId });
     this.updateModelPillUI();
+    this.renderChatModelPopoverContent();
+    this.generateModelRecommendedQuestions(true);
     this.syncSettingsModalUI();
+    this.showFloatingCard(
+      `✦ 주 AI 모델 전환: ${modelName}`,
+      `<p>웹페이지 전반적인 기능(학술 번역, 관련 논문 추천, 질문 의도 분석 등)을 <strong>${this.escapeHtml(modelName)}</strong> 모델이 전담하여 수행합니다.</p>`
+    );
   }
 
   saveApiSettings() {
-    const keyInput = document.getElementById("modal-gemini-key");
-    const modelSelect = document.getElementById("set-ai-model-select");
-    window.moonlightAI?.setConfig(
-      keyInput?.value || "",
-      modelSelect?.value || window.moonlightAI.getActiveModel()
-    );
-    this.updateModelPillUI();
-    this.showFloatingCard(
-      "🔑 Gemini API 설정 적용 완료",
-      `<p>현재 활성 모델: <strong>${this.escapeHtml(window.moonlightAI.getModelDisplayName())}</strong></p>`
-    );
+    return this.saveAllApiSettings();
   }
 
   toggleTheme() {

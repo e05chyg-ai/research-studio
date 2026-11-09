@@ -66,6 +66,7 @@ class ResearchStorageDB {
       openaiApiKey: "",
       claudeApiKey: "",
       deepseekApiKey: "",
+      verifiedApis: { gemini: false, openai: false, claude: false },
       // 화면 설정
       lightMode: !document.documentElement.classList.contains("dark"),
       fontSizePx: 16,
