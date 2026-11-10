@@ -1205,14 +1205,67 @@ ${text}`;
   }
 
   /**
-   * Intelligently classify user intent into 3 distinct categories:
-   * 1. 'curiosity': 직관적 호기심 탐구 ("왜?", "쉽게 비유로", "어디에 쓰이나요?")
-   * 2. 'general': 연구 확장 및 거시 질의 (트렌드, 다른 모델 비교, 향후 전망)
-   * 3. 'paper': 논문 본문의 방법론, 수식, 실험, 한계점 직접 질의
+   * Intelligently classify user intent into distinct categories:
+   * 1. 'term': 논문 속 전문 용어 및 핵심 개념 질의 ("Attention이 뭐야?", "Self-attention이란?", "용어 뜻")
+   * 2. 'curiosity': 직관적 호기심 탐구 ("왜?", "쉽게 비유로", "어디에 쓰이나요?")
+   * 3. 'general': 연구 확장 및 거시 질의 (트렌드, 다른 모델 비교, 향후 전망)
+   * 4. 'paper': 논문 본문의 방법론, 수식, 실험, 한계점 직접 질의 (논문 전체 요약 포함)
    */
-  classifyUserIntent(userMessage) {
-    const q = (userMessage || "").toLowerCase();
+  classifyUserIntent(userMessage, paper = null) {
+    const raw = (userMessage || "").trim();
+    const q = raw.toLowerCase();
 
+    // 1. Check if user is asking for whole-paper summary, novelty comparison, or limitations
+    const isPaperMetaQuery =
+      /(이\s*논문|전체\s*논문|논문\s*전체).*(핵심|요약|내용|뭐야|정리|줄거리)/i.test(q) ||
+      /논문\s*(핵심|요약|정리|줄거리)/i.test(q) ||
+      q.includes("3줄 요약") ||
+      q.includes("세줄 요약") ||
+      q.includes("전체 요약") ||
+      q.includes("한계") ||
+      q.includes("약점") ||
+      q.includes("limitation") ||
+      q.includes("기존") ||
+      q.includes("달라") ||
+      q.includes("차이") ||
+      q === "이 논문의 핵심이 뭐야?" ||
+      q === "이 논문의 핵심이 뭐야" ||
+      q === "핵심이 뭐야" ||
+      q === "요약해줘" ||
+      q === "논문 요약" ||
+      q === "summary";
+
+    if (isPaperMetaQuery) {
+      return "paper";
+    }
+
+    // 2. Specific word / term / concept definition check
+    const termKeywords = [
+      "뜻", "의미", "정의", "단어", "용어", "개념", "무슨 뜻", "어떤 의미", "무슨 말",
+      "definition", "meaning", "concept", "term", "glossary", "define",
+      "이 뭐야", "가 뭐야", "은 뭐야", "는 뭐야", "이란", "이란?", "란?", "란 무엇", "이란 무엇", "what is", "what are"
+    ];
+
+    let hasPaperKeywordMatch = false;
+    if (paper) {
+      const allKws = [
+        ...(paper.keywordsList || []),
+        ...((paper.keywordDictionary || []).map((k) => k.term))
+      ].map((k) => String(k).toLowerCase()).filter((k) => k.length >= 2);
+      for (const kw of allKws) {
+        if (q.includes(kw)) {
+          hasPaperKeywordMatch = true;
+          break;
+        }
+      }
+    }
+
+    const hasTermKeyword = termKeywords.some((tk) => q.includes(tk));
+    if (hasTermKeyword || (hasPaperKeywordMatch && (q.includes("뭐") || q.includes("알려") || q.includes("설명") || q.endsWith("?")))) {
+      return "term";
+    }
+
+    // 3. Curiosity check
     const curiosityKeywords = [
       "왜", "어째서", "쉽게", "비유", "초보", "입문", "일상", "실생활", "어디에 쓰",
       "궁금", "재밌", "호기심", "간단히", "쉬운", "이해하기 쉽게", "동화", "어린이",
@@ -1234,6 +1287,41 @@ ${text}`;
     }
 
     return "paper";
+  }
+
+  /**
+   * Extracts target word/term from user question
+   */
+  extractTargetTerm(userMessage, paper = null) {
+    if (!userMessage) return "";
+    const raw = userMessage.trim();
+
+    // 1. If paper keywords exist, check if any keyword is mentioned in userMessage
+    if (paper) {
+      const allKws = [
+        ...((paper.keywordDictionary || []).map((k) => k.term)),
+        ...(paper.keywordsList || [])
+      ].filter(Boolean);
+      allKws.sort((a, b) => b.length - a.length);
+      for (const kw of allKws) {
+        const regex = new RegExp(`(^|[\\s"'\`(\\[])${kw.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g, "\\$&")}([\\s"'\`)\\]?!.,~이가은는를을의]|\$)`, "i");
+        if (regex.test(raw)) {
+          return kw;
+        }
+      }
+    }
+
+    // 2. Strip question boilerplate affixes
+    let cleaned = raw
+      .replace(/^(질문\s*:\s*|이\s*논문\s*속(의)?\s*|이\s*논문(의|에서)?\s*|논문(의|에서|속)?\s*|단어\s*|용어\s*|개념\s*)+/gi, "")
+      .replace(/\s*(이|가|은|는|의)?\s*(무슨\s*뜻(인가요|인가|인지|이야)?|어떤\s*의미(인가요|인가|인지|야)?|뜻이\s*뭐야|의미가\s*뭐야|정의가\s*뭐야|개념이\s*뭐야|단어\s*뜻|용어\s*설명|개념\s*설명|설명해줘|알려줘|뭐야\??|란\??|이란\??|무엇인가요\??|무엇인가\??|무엇인지\??|알고\s*싶어\??|에\s*대해\s*알려줘\??|에\s*대해\s*설명해줘\??|이란\s*무엇인가요\??)[\s?.]*$/gi, "")
+      .replace(/^["'《〈「`]+|["'》〉」`]+$/g, "")
+      .trim();
+
+    if (cleaned.length >= 2) {
+      return cleaned;
+    }
+    return raw;
   }
 
   /**
@@ -1383,10 +1471,12 @@ ${paperSummaries}
     const activeModel = this.getActiveModel();
     const provider = this.getModelProvider(activeModel);
     const modelName = this.getModelDisplayName(activeModel);
-    const intentType = this.classifyUserIntent(userMessage);
+    const intentType = this.classifyUserIntent(userMessage, paper);
 
     let intentBadge = "";
-    if (intentType === "curiosity") {
+    if (intentType === "term") {
+      intentBadge = `> **🎯 [질문 의도 분석: 논문 전문 용어 및 핵심 개념 질의]** 논문 본문의 학술 정의와 본문 맥락을 바탕으로 상세히 해설합니다.\n\n`;
+    } else if (intentType === "curiosity") {
       intentBadge = `> **💡 [질문 의도 분석: 직관적 호기심 탐구]** 핵심 개념을 알기 쉬운 일상 비유와 직관으로 풀어냅니다.\n\n`;
     } else if (intentType === "general") {
       intentBadge = `> **🌐 [질문 의도 분석: 연구 확장 및 거시 질의]** 학술 분야 전반의 맥락과 통찰을 바탕으로 답변합니다.\n\n`;
@@ -1416,18 +1506,28 @@ ${paperSummaries}
 
     const intentPromptGuide = `[사용자 질문 의도 자동 파악 및 맞춤 응답 지침]
 당신은 연구자를 돕는 전문 AI 모델(${modelName})입니다.
-사용자의 질문("${userMessage}")을 읽고 질문의 의도를 다음 3가지 유형 중 하나로 스스로 파악·분류하여 가장 알맞은 형식으로 답변하세요:
+사용자의 질문("${userMessage}")을 읽고 질문의 의도를 다음 유형 중 하나로 스스로 파악·분류하여 가장 알맞은 형식으로 답변하세요:
 
-1. [논문 심층 질의]: 현재 논문 《${paper?.title || ""}》의 본문, 방법론, 수식, 데이터셋, 실험 결과, 한계점에 대한 직접적인 학술 질문
-   -> 논문 본문 및 초록을 엄밀한 근거로 삼아 전문적이고 명확하게 설명.
-2. [직관적 호기심 탐구]: "왜 이 연구를 하지?", "쉽게 비유로 알려줘", "일상생활 어디에 쓰이나요?" 등 단순 호기심/개념 이해 질문
+1. [논문 전문 용어 및 핵심 개념 질의]: 논문 속 특정 단어, 용어, 모델명, 아키텍처, 수학적 개념(예: Attention, Transformer, Self-attention 등)의 정의나 뜻을 묻는 질문
+   -> 🚨 [필수 준수 사항]: 절대로 논문 전체 요약이나 3줄 요약을 기계적으로 출력하지 마세요!
+   -> 반드시 사용자가 질문한 '해당 단어/개념'에 집중하여 다음 3단계로 명확히 답변하세요:
+      ① [학술적 개념 정의]: 해당 용어의 학술적/이론적 정의를 명확하게 설명.
+      ② [논문 본문에서의 핵심 역할 및 메커니즘]: 본 논문 《${paper?.title || ""}》에서 이 개념이 왜 사용되었고 어떤 구체적인 역할을 하는지 설명.
+      ③ [본문 발췌 및 문맥]: 본 논문에서 이 용어가 언급된 핵심 구절이나 관련 문장을 인용하고 친절히 해설.
+
+2. [논문 심층 질의]: 현재 논문 《${paper?.title || ""}》의 본문, 방법론, 수식, 데이터셋, 실험 결과, 한계점에 대한 직접적인 학술 질문
+   -> 논문 본문 및 초록을 엄밀한 근거로 삼아 전문적이고 명확하게 설명. (단, 사용자가 명시적으로 "논문 요약"이나 "핵심 요약"을 요청한 경우에만 요약을 제공할 것)
+
+3. [직관적 호기심 탐구]: "왜 이 연구를 하지?", "쉽게 비유로 알려줘", "일상생활 어디에 쓰이나요?" 등 단순 호기심/개념 이해 질문
    -> 어려운 학술 용어를 쉬운 일상 비유와 직관, 실생활 예시로 풀어 호기심을 완벽히 해소.
-3. [연구 확장 및 거시 질의]: 연구 분야 트렌드, 다른 기술과의 비교, 향후 전망, 산업 생태계 영향 등 확장 질문
+
+4. [연구 확장 및 거시 질의]: 연구 분야 트렌드, 다른 기술과의 비교, 향후 전망, 산업 생태계 영향 등 확장 질문
    -> 넓은 학술 및 기술 생태계 맥락에서 균형 잡힌 통찰력과 비교 관점을 제시.
 
 [필수 출력 형식]
 답변의 첫 번째 줄은 반드시 파악한 의도에 맞는 인용 블록 뱃지로 시작하세요:
-- 논문 질의: > **🎯 [질문 의도 분석: 논문 심층 질의]** 논문 본문의 구체적 근거를 바탕으로 분석합니다.
+- 용어/개념 질의: > **🎯 [질문 의도 분석: 논문 전문 용어 및 핵심 개념 질의]** 논문 본문의 학술 정의와 본문 맥락을 바탕으로 상세히 해설합니다.
+- 논문 질의: > **🎯 [질문 의도 분석: 논문 심층 질의]** 논문 본문의 구체적 근거와 학술적 논지를 바탕으로 분석합니다.
 - 호기심 질의: > **💡 [질문 의도 분석: 직관적 호기심 탐구]** 핵심 개념을 알기 쉬운 일상 비유와 직관으로 풀어냅니다.
 - 확장/기타 질의: > **🌐 [질문 의도 분석: 연구 확장 및 거시 질의]** 학술 분야 전반의 맥락과 통찰을 바탕으로 답변합니다.
 그 뒤 빈 줄 1개를 두고, ${lang.label} 언어로 정돈된 마크다운 본문을 작성하세요.`;
@@ -1474,6 +1574,89 @@ ${paperSummaries}
     }
 
     // Heuristic Intent-Tailored Responses
+    if (intentType === "term") {
+      const term = this.extractTargetTerm(userMessage, paper) || (paper.keywordsList?.[0] || "핵심 용어");
+      const exactDictItem = (paper.keywordDictionary || []).find(
+        (k) => k.term.toLowerCase() === term.toLowerCase()
+      );
+      const partialDictItem = (paper.keywordDictionary || []).find(
+        (k) => term.toLowerCase().includes(k.term.toLowerCase())
+      );
+      const dictItem = exactDictItem || partialDictItem;
+
+      const termDisplayName = exactDictItem ? exactDictItem.term : term;
+      const termKoName = exactDictItem?.termKo || `${termDisplayName} (핵심 학술 개념)`;
+      const academicDef = exactDictItem?.definition && !exactDictItem.definition.includes("동기화 중")
+        ? exactDictItem.definition
+        : (partialDictItem?.definition && !partialDictItem.definition.includes("동기화 중")
+          ? partialDictItem.definition
+          : `**${termDisplayName}**은(는) 《${paper.title}》의 이론적 가설과 방법론을 지탱하는 핵심 전문 개념입니다.`);
+
+      // Search paper sections for matching paragraphs containing term
+      let bestParaEn = "";
+      let bestParaKo = "";
+      let bestSecTitle = "";
+      let maxScore = 0;
+      const termLower = term.toLowerCase();
+
+      for (const sec of paper.sections || []) {
+        for (const p of sec.paragraphs || []) {
+          const en = (p.en || "").toLowerCase();
+          const ko = (p.ko || "").toLowerCase();
+          let score = 0;
+          if (en.includes(termLower)) score += 10;
+          if (ko.includes(termLower)) score += 8;
+          const subTokens = termLower.split(/[\s\-_]+/).filter((t) => t.length >= 2);
+          for (const st of subTokens) {
+            if (en.includes(st)) score += 2;
+            if (ko.includes(st)) score += 2;
+          }
+          if (score > maxScore) {
+            maxScore = score;
+            bestParaEn = p.en;
+            bestParaKo = p.ko || "";
+            bestSecTitle = sec.title || `섹션 ${sec.number || ""}`;
+          }
+        }
+      }
+
+      if (!bestParaEn && paper.sections?.[0]?.paragraphs?.[0]) {
+        bestParaEn = paper.sections[0].paragraphs[0].en;
+        bestParaKo = paper.sections[0].paragraphs[0].ko || "";
+        bestSecTitle = paper.sections[0].title || "본문 서론";
+      }
+
+      let translatedExcerpt = bestParaKo;
+      if (!translatedExcerpt && bestParaEn) {
+        try {
+          translatedExcerpt = await this.translateText(bestParaEn.slice(0, 450), lang.code);
+        } catch (_) {
+          translatedExcerpt = bestParaEn.slice(0, 450);
+        }
+      }
+
+      const roleInPaper = `본 논문 **《${paper.title}》**에서 **${termDisplayName}**은(는) ${paper.threeLineSummary?.[1] || "핵심 방법론 및 아키텍처"}을 실현하고 모델의 성능을 결정짓는 핵심 기여 요소로 작용합니다.`;
+
+      let citationBlock = "";
+      if (bestParaEn) {
+        citationBlock = `\n\n**3. 논문 본문 원문 발췌 및 한국어 맥락:**\n` +
+          `📌 *발췌 위치: ${bestSecTitle}*\n` +
+          `> **원문 (En):** "${bestParaEn.slice(0, 320)}${bestParaEn.length > 320 ? "..." : ""}"\n\n` +
+          `> **한국어 번역:** "${(translatedExcerpt || "").slice(0, 320)}${(translatedExcerpt || "").length > 320 ? "..." : ""}"\n\n` +
+          `본문 맥락에서 확인되듯, 저자들은 **${termDisplayName}**의 메커니즘을 적극 활용하여 기존 접근법의 한계를 극복하고 모델의 효율성과 일반화 성능을 달성했습니다.`;
+      }
+
+      return intentBadge +
+        `질문하신 논문 속 전문 용어 **"${termDisplayName}"**에 대한 정밀 학술 해설입니다.\n\n` +
+        `**1. 학술적 개념 정의:**\n` +
+        `• **용어 표기:** ${termKoName}\n` +
+        `• **개념 해설:** ${academicDef}\n\n` +
+        `**2. 논문 본문에서의 핵심 역할 및 메커니즘:**\n` +
+        `${roleInPaper}${citationBlock}${
+          prompts.systemPrompt?.trim() ? `\n\n*(시스템 프롬프트 반영: "${prompts.systemPrompt.trim()}")*` : ""
+        }${extraRefPapers.length > 0 ? `\n📎 *관련 참고 논문: ${extraRefPapers.join(", ")}*` : ""}`;
+    }
+
     if (intentType === "curiosity") {
       return intentBadge + `질문하신 **"${userMessage}"**에 대한 직관적인 해설입니다.\n\n` +
         `**💡 일상 비유로 이해하기:**\n` +
@@ -1497,7 +1680,19 @@ ${paperSummaries}
     const q = userMessage.toLowerCase();
     let baseReply = "";
 
-    if (q.includes("핵심") || q.includes("요약") || q.includes("summary") || (q.includes("뭐야") && !q.includes("달라") && !q.includes("한계"))) {
+    const isFullPaperSummary =
+      (q.includes("논문") && (q.includes("요약") || q.includes("핵심") || q.includes("정리") || q.includes("전체"))) ||
+      q.includes("3줄 요약") ||
+      q.includes("세줄 요약") ||
+      q.includes("전체 요약") ||
+      q === "이 논문의 핵심이 뭐야?" ||
+      q === "이 논문의 핵심이 뭐야" ||
+      q === "핵심이 뭐야" ||
+      q === "요약해줘" ||
+      q === "논문 요약" ||
+      q === "summary";
+
+    if (isFullPaperSummary) {
       baseReply = `**《${paper.title}》 핵심 정리:**\n\n1. ${paper.threeLineSummary?.[0] || ""}\n2. ${paper.threeLineSummary?.[1] || ""}\n3. ${paper.threeLineSummary?.[2] || ""}\n\n**종합 요약:**\n${paper.summaryText || ""}`;
     } else if (q.includes("기존") || q.includes("달라") || q.includes("차이") || q.includes("독창성") || q.includes("novel")) {
       baseReply = `**《${paper.title}》의 연구적 차별점 및 핵심 방법론:**\n\n- **문제 정의:** ${paper.threeLineSummary?.[0] || ""}\n- **제안 방법:** ${paper.threeLineSummary?.[1] || ""}\n- **주요 성과:** ${paper.threeLineSummary?.[2] || ""}`;

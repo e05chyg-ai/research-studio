@@ -1660,6 +1660,7 @@
                           <span id="modal-gemini-status" class="text-[10px] text-zinc-400">미인증 (검증 필요)</span>
                         </div>
                         <input id="modal-gemini-key" type="password" placeholder="AIzaSy..."
+                               oninput="app.autoSaveApiKey('gemini', this.value)"
                                class="w-full rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec]" />
                       </div>
 
@@ -1670,6 +1671,7 @@
                           <span id="modal-openai-status" class="text-[10px] text-zinc-400">미인증 (검증 필요)</span>
                         </div>
                         <input id="modal-openai-key" type="password" placeholder="sk-proj-..."
+                               oninput="app.autoSaveApiKey('openai', this.value)"
                                class="w-full rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec]" />
                       </div>
 
@@ -1680,6 +1682,7 @@
                           <span id="modal-claude-status" class="text-[10px] text-zinc-400">미인증 (검증 필요)</span>
                         </div>
                         <input id="modal-claude-key" type="password" placeholder="sk-ant-..."
+                               oninput="app.autoSaveApiKey('claude', this.value)"
                                class="w-full rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#5850ec]" />
                       </div>
 

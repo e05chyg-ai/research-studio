@@ -1720,8 +1720,9 @@ class MoonlightApp {
 
     const activeModelName = window.moonlightAI ? window.moonlightAI.getModelDisplayName() : "AI 연구 동료";
 
+    let answer = "";
     try {
-      const answer = await window.moonlightAI.chat(
+      answer = await window.moonlightAI.chat(
         text,
         this.currentPaper,
         contextQuote,
@@ -1748,7 +1749,7 @@ class MoonlightApp {
       this.renderDiscussionSection();
     }
 
-    if (this.currentPaper) {
+    if (this.currentPaper && answer) {
       window.researchDB?.logActivity({
         type: "ai_chat",
         paperId: this.currentPaper.id,
@@ -4098,6 +4099,30 @@ class MoonlightApp {
         });
       }
     });
+  }
+
+  autoSaveApiKey(provider, value) {
+    const val = (value || "").trim();
+    if (provider === "gemini") {
+      if (val) localStorage.setItem("research_studio_gemini_key", val);
+      else localStorage.removeItem("research_studio_gemini_key");
+      window.researchDB?.saveAppSettings({ geminiApiKey: val });
+    } else if (provider === "openai") {
+      if (val) localStorage.setItem("research_studio_openai_key", val);
+      else localStorage.removeItem("research_studio_openai_key");
+      window.researchDB?.saveAppSettings({ openaiApiKey: val });
+    } else if (provider === "claude") {
+      if (val) localStorage.setItem("research_studio_claude_key", val);
+      else localStorage.removeItem("research_studio_claude_key");
+      window.researchDB?.saveAppSettings({ claudeApiKey: val });
+    }
+
+    clearTimeout(this._apiKeyDebounceTimer);
+    if (val.length >= 20) {
+      this._apiKeyDebounceTimer = setTimeout(() => {
+        this.saveAllApiSettings();
+      }, 1500);
+    }
   }
 
   async saveAllApiSettings() {
