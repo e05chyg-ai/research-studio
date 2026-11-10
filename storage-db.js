@@ -61,7 +61,7 @@ class ResearchStorageDB {
       autoOpenPdf: false,
       autoOpenPeriod: "session", // 'session' (지금 읽는 동안만) | 'always' (앞으로 계속)
       language: "ko", // 'ko', 'en', 'ja', 'zh-CN', 'zh-TW', 'es', 'de', 'fr'
-      aiModel: "gemini-2.5-flash",
+      aiModel: "gemini-3.8-flash",
       geminiApiKey: "",
       openaiApiKey: "",
       claudeApiKey: "",
@@ -85,9 +85,6 @@ class ResearchStorageDB {
     } catch (_) {}
 
     const merged = { ...defaults, ...stored };
-    if (merged.aiModel === "gemini-3.1-flash-lite") {
-      merged.aiModel = "gemini-2.5-flash";
-    }
 
     // Resolve autoOpenPdf based on period ('session' vs 'always')
     if (merged.autoOpenPeriod === "session") {

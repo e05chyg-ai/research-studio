@@ -1507,8 +1507,16 @@ class MoonlightApp {
             </div>
           `;
         } else {
+          const modelTag = m.modelName || window.moonlightAI?.getModelDisplayName() || "AI 연구 동료";
           return `
             <div class="rounded-2xl bg-zinc-100 dark:bg-[#1c1c24] border border-zinc-200/80 dark:border-zinc-800 p-3 text-xs leading-relaxed text-zinc-800 dark:text-zinc-200 ai-prose">
+              <div class="flex items-center justify-between pb-1.5 mb-2 border-b border-zinc-200/60 dark:border-zinc-800/80 text-[10.5px] font-semibold text-indigo-600 dark:text-indigo-400 select-none">
+                <span class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>${this.escapeHtml(modelTag)} 분석</span>
+                </span>
+                <span class="text-zinc-400 font-normal">${this.escapeHtml(m.time || "방금 전")}</span>
+              </div>
               ${this.renderMarkdownWithMath(m.content)}
             </div>
           `;
@@ -1541,7 +1549,14 @@ class MoonlightApp {
     }
 
     if (label) {
-      label.innerHTML = `✦ <strong class="text-zinc-800 dark:text-zinc-100">${this.escapeHtml(activeModelName)}</strong>의 논문 추론 추천 질문 (3가지)`;
+      label.innerHTML = `
+        <div class="flex items-center justify-between w-full">
+          <span>✦ <strong class="text-indigo-600 dark:text-indigo-400">${this.escapeHtml(activeModelName)}</strong>의 논문 추론 추천 질문 (3가지)</span>
+          <button onclick="app.generateModelRecommendedQuestions(true)" class="hover:text-indigo-500 p-0.5 rounded transition text-zinc-400 hover:text-indigo-600" title="추천 질문 다시 추론">
+            ↻ 새로고침
+          </button>
+        </div>
+      `;
     }
 
     const chips = (this.currentPaper.suggestedQuestions && this.currentPaper.suggestedQuestions.length >= 3)
@@ -1703,6 +1718,8 @@ class MoonlightApp {
     });
     this.renderDiscussionSection();
 
+    const activeModelName = window.moonlightAI ? window.moonlightAI.getModelDisplayName() : "AI 연구 동료";
+
     try {
       const answer = await window.moonlightAI.chat(
         text,
@@ -1714,14 +1731,18 @@ class MoonlightApp {
       this.discussionsByPaper[key].pop();
       this.discussionsByPaper[key].push({
         role: "assistant",
-        content: answer || "답변을 생성하지 못했습니다. 잠시 후 다시 질문해 주세요."
+        content: answer || "답변을 생성하지 못했습니다. 잠시 후 다시 질문해 주세요.",
+        modelName: activeModelName,
+        time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
       });
     } catch (err) {
       console.error("Chat invocation error:", err);
       this.discussionsByPaper[key].pop();
       this.discussionsByPaper[key].push({
         role: "assistant",
-        content: `⚠️ **답변 생성 중 오류가 발생했습니다:** ${this.escapeHtml(err.message || "네트워크 연결을 확인해 주세요.")}\n\n*상단 ⚙️ 설정에서 API 키가 올바른지 확인하거나 다른 활성 모델로 변경해 보세요.*`
+        content: `⚠️ **답변 생성 중 오류가 발생했습니다:** ${this.escapeHtml(err.message || "네트워크 연결을 확인해 주세요.")}\n\n*상단 ⚙️ 설정에서 API 키가 올바른지 확인하거나 다른 활성 모델로 변경해 보세요.*`,
+        modelName: activeModelName,
+        time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
       });
     } finally {
       this.renderDiscussionSection();
@@ -3672,7 +3693,11 @@ class MoonlightApp {
   getAiModelCatalog() {
     return [
       // 1. Google Gemini
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", providerName: "Google Gemini", caption: "초고속 실시간 멀티모달 추론 (권장)" },
+      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", provider: "gemini", providerName: "Google Gemini", caption: "초고속 차세대 멀티모달 플래그십 (권장)" },
+      { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash Lite", provider: "gemini", providerName: "Google Gemini", caption: "경량 초고속 연구 보조 엔진" },
+      { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", provider: "gemini", providerName: "Google Gemini", caption: "심층 학술 분석 및 수식 추론" },
+      { id: "gemini-3-flash", name: "Gemini 3 Flash", provider: "gemini", providerName: "Google Gemini", caption: "고성능 실시간 멀티모달" },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", providerName: "Google Gemini", caption: "초고속 실시간 멀티모달 추론" },
       { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "gemini", providerName: "Google Gemini", caption: "고성능 코딩 및 심층 학술 분석" },
       { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "gemini", providerName: "Google Gemini", caption: "차세대 멀티모달 종합 모델" },
       { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "gemini", providerName: "Google Gemini", caption: "200만 토큰 초대형 롱컨텍스트" },
@@ -4132,18 +4157,18 @@ class MoonlightApp {
       this.updateProviderBadgeUI("claude", verificationResults.claude, !!claudeVal);
       this.syncAiModelSelectOptgroups(verificationResults);
 
-      let currentRequestedModel = modelSelect?.value || window.moonlightAI?.getActiveModel() || "gemini-2.5-flash";
+      let currentRequestedModel = modelSelect?.value || window.moonlightAI?.getActiveModel() || "gemini-3.8-flash";
       let activeProvider = window.moonlightAI?.getModelProvider(currentRequestedModel) || "gemini";
 
       if (!verificationResults[activeProvider]) {
         if (verificationResults.gemini) {
-          currentRequestedModel = "gemini-2.5-flash";
+          currentRequestedModel = "gemini-3.8-flash";
         } else if (verificationResults.openai) {
           currentRequestedModel = "gpt-4o";
         } else if (verificationResults.claude) {
           currentRequestedModel = "claude-3-5-sonnet-20241022";
         } else {
-          currentRequestedModel = "gemini-2.5-flash";
+          currentRequestedModel = "gemini-3.8-flash";
         }
       }
 
@@ -4906,17 +4931,20 @@ class MoonlightApp {
     if (!selectedText || !this.currentPaper) return;
     this.hideSelectionToolbar();
 
+    const activeModelName = window.moonlightAI ? window.moonlightAI.getModelDisplayName() : "AI 연구 동료";
+    const hasKey = window.moonlightAI && window.moonlightAI.hasApiKey();
+
     const titleMap = {
-      explain: "💡 AI 연구 동료 문맥 설명",
-      translate: "🌐 학술 전문 번역",
-      summarize: "📝 선택 구절 3줄 요약"
+      explain: hasKey ? `💡 ${activeModelName} 문맥 설명` : "💡 AI 연구 동료 문맥 설명",
+      translate: hasKey ? `🌐 ${activeModelName} 학술 전문 번역` : "🌐 학술 전문 번역",
+      summarize: hasKey ? `📝 ${activeModelName} 선택 구절 3줄 요약` : "📝 선택 구절 3줄 요약"
     };
 
     this.showFloatingCard(
       titleMap[action] || "AI 즉시 분석",
       `<div class="flex items-center gap-2 text-indigo-500 py-2">
          <div class="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-         <span>선택한 구절을 분석하고 있습니다...</span>
+         <span>${hasKey ? `${this.escapeHtml(activeModelName)} 모델이 구절을 심층 분석하고 있습니다...` : "선택한 구절을 분석하고 있습니다..."}</span>
        </div>`
     );
 
@@ -5050,7 +5078,7 @@ class MoonlightApp {
   }
 
   cycleModelQuick() {
-    const models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+    const models = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
     const idx = models.indexOf(window.moonlightAI.getActiveModel());
     const next = models[(idx + 1) % models.length];
     window.moonlightAI.setConfig(window.moonlightAI.apiKey, next);
@@ -5058,7 +5086,7 @@ class MoonlightApp {
   }
 
   updateModelPillUI() {
-    const name = window.moonlightAI ? window.moonlightAI.getModelDisplayName() : "Gemini 2.5 Flash";
+    const name = window.moonlightAI ? window.moonlightAI.getModelDisplayName() : "Gemini 3.8 Flash";
     const label = document.getElementById("chat-model-name-label");
     if (label) {
       label.textContent = name;

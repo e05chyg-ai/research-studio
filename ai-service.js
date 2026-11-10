@@ -8,8 +8,7 @@ class MoonlightAIService {
     this.model =
       savedAppModel ||
       localStorage.getItem("research_studio_gemini_model") ||
-      "gemini-2.5-flash";
-    if (this.model === "gemini-3.1-flash-lite") this.model = "gemini-2.5-flash";
+      "gemini-3.8-flash";
     this.previousInteractionId = null;
     this.translationCache = new Map();
   }
@@ -37,15 +36,15 @@ class MoonlightAIService {
     const m = modelId || this.getActiveModel();
     const map = {
       // Google Gemini
+      "gemini-3.8-flash": "Gemini 3.8 Flash",
+      "gemini-3.1-flash-lite": "Gemini 3.1 Flash Lite",
+      "gemini-3.1-pro": "Gemini 3.1 Pro",
+      "gemini-3-flash": "Gemini 3 Flash",
       "gemini-2.5-flash": "Gemini 2.5 Flash",
       "gemini-2.5-pro": "Gemini 2.5 Pro",
       "gemini-2.0-flash": "Gemini 2.0 Flash",
       "gemini-1.5-pro": "Gemini 1.5 Pro",
       "gemini-1.5-flash": "Gemini 1.5 Flash",
-      "gemini-3.1-flash-lite": "Gemini 2.5 Flash",
-      "gemini-3-flash": "Gemini 2.5 Flash",
-      "gemini-3.8-flash": "Gemini 2.5 Flash",
-      "gemini-3.1-pro": "Gemini 2.5 Pro",
 
       // OpenAI GPT
       "gpt-4o": "GPT-4o",
@@ -66,18 +65,21 @@ class MoonlightAIService {
       "claude-sonnet-5": "Claude 3.5 Sonnet",
       "claude-opus-5.5": "Claude 3 Opus"
     };
-    return map[m] || m || "Gemini 2.5 Flash";
+    return map[m] || m || "Gemini 3.8 Flash";
   }
 
   getActiveModel() {
     const allowed = [
       // Google Gemini
+      "gemini-3.8-flash",
+      "gemini-3.1-flash-lite",
+      "gemini-3.1-pro",
+      "gemini-3-flash",
       "gemini-2.5-flash",
       "gemini-2.5-pro",
       "gemini-2.0-flash",
       "gemini-1.5-pro",
       "gemini-1.5-flash",
-      "gemini-3.1-flash-lite",
 
       // OpenAI GPT
       "gpt-4o",
@@ -96,8 +98,8 @@ class MoonlightAIService {
     const appModel = window.researchDB?.getAppSettings()?.aiModel;
     if (appModel && allowed.includes(appModel)) {
       this.model = appModel;
-    } else if (!allowed.includes(this.model) || this.model === "gemini-3.1-flash-lite") {
-      this.model = "gemini-2.5-flash";
+    } else if (!allowed.includes(this.model)) {
+      this.model = "gemini-3.8-flash";
     }
     return this.model;
   }
@@ -114,11 +116,7 @@ class MoonlightAIService {
 
     // Gemini models
     if (m.startsWith("gemini")) {
-      if (["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"].includes(m)) {
-        return m;
-      }
-      if (m.includes("pro")) return "gemini-2.5-pro";
-      return "gemini-2.5-flash";
+      return m;
     }
 
     // OpenAI models
@@ -394,13 +392,14 @@ class MoonlightAIService {
   }
 
   async callGeminiAPI(model, apiKey, prompt, systemInstruction = "", imageBase64 = null) {
-    const targetModel = this.normalizeModelName(model || this.getActiveModel());
+    const targetModel = (model || this.getActiveModel() || "gemini-3.8-flash").replace(/^models\//, "");
     const sys = systemInstruction || this.buildSystemInstruction();
 
-    // Candidate models to try in order: preferred target -> gemini-2.5-flash -> gemini-1.5-flash
+    // Candidate models to try in order: preferred target -> gemini-3.8-flash -> gemini-2.5-flash -> gemini-1.5-flash -> gemini-2.0-flash
     const candidateModels = [targetModel];
-    if (!candidateModels.includes("gemini-2.5-flash")) candidateModels.push("gemini-2.5-flash");
-    if (!candidateModels.includes("gemini-1.5-flash")) candidateModels.push("gemini-1.5-flash");
+    for (const fb of ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]) {
+      if (!candidateModels.includes(fb)) candidateModels.push(fb);
+    }
 
     let lastError = null;
 
@@ -441,15 +440,15 @@ class MoonlightAIService {
         } else {
           const errText = await res.text().catch(() => "");
           lastError = new Error(`Gemini API 오류 (${res.status} [${cleanName}]): ${errText}`);
-          if (res.status === 404) {
-            console.warn(`Gemini model ${cleanName} not found, trying fallback...`);
+          if (res.status === 404 || res.status === 400) {
+            console.warn(`Gemini model ${cleanName} failed (${res.status}), trying fallback...`);
             continue;
           }
           throw lastError;
         }
       } catch (err) {
         lastError = err;
-        if (err.message && err.message.includes("404")) continue;
+        if (err.message && (err.message.includes("404") || err.message.includes("400"))) continue;
         throw err;
       }
     }
@@ -659,7 +658,7 @@ ${text}`;
 
           const tokenRecords = idxGroup.map((idx) => this.protectAcademicTokens(textsArray[idx]));
           const joined = tokenRecords.map((r) => r.masked).join(DELIM);
-          const rawTranslated = await this.callNeuralTranslateChunk(joined, tl);
+          const rawTranslated = await this.translateWithActiveModel(joined, tl);
           const splitParts = rawTranslated.split(/⟪\s*948271\s*⟫/);
 
           if (splitParts.length === idxGroup.length) {
@@ -1248,13 +1247,19 @@ ${text}`;
 
     if (this.isProviderVerified(provider)) {
       try {
+        let sectionSnippet = "";
+        if (paper && Array.isArray(paper.sections)) {
+          sectionSnippet = "\n- 주요 섹션 및 내용:\n" + paper.sections.slice(0, 5).map(s => `  * ${s.title}: ${(s.paragraphs?.[0]?.en || "").slice(0, 160)}`).join("\n");
+        }
+
         const prompt = `현재 열람 중인 논문 정보:
 - 제목: "${paper.title}"
+- 저자: ${(paper.authors || []).join(", ")} (${paper.year || ""})
 - 초록: "${paper.abstractEn || paper.summaryText || ""}"
-- 주요 키워드: ${(paper.keywordsList || []).join(", ")}
+- 주요 키워드: ${(paper.keywordsList || []).join(", ")}${sectionSnippet}
 
 당신은 연구자를 돕는 전문 AI 모델(${this.getModelDisplayName(model)})입니다.
-현재 열려 있는 논문을 분석·추론하여, 연구자가 논문의 본질과 핵심 기여를 파악할 수 있는 '추천 질문 3가지'를 생성하세요:
+현재 열려 있는 논문을 면밀히 학습하고 추론하여, 연구자가 논문의 본질과 핵심 기여를 파악할 수 있는 '추천 질문 3가지'를 생성하세요:
 1. 논문의 핵심 가설/방법론/아키텍처의 작동 원리와 독창성에 관한 질문
 2. 베이스라인 대비 실험적 성능, 검증 데이터셋, 또는 발견점에 관한 질문
 3. 본 연구의 실질적 한계점, 가정(Assumption), 또는 향후 후속 연구 과제에 관한 질문
@@ -1266,12 +1271,26 @@ ${text}`;
           systemInstruction: "학술 연구자를 위한 깊이 있는 논문 탐색 질문 3가지를 JSON 배열 형식으로만 추출하는 전문가입니다."
         });
 
+        let questions = [];
         const jsonMatch = reply.match(/\[\s*"[\s\S]*?"\s*,\s*"[\s\S]*?"\s*,\s*"[\s\S]*?"\s*\]/);
         if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (Array.isArray(parsed) && parsed.length >= 3) {
-            return parsed.slice(0, 3).map((q) => String(q).trim());
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (Array.isArray(parsed) && parsed.length >= 3) {
+              questions = parsed.slice(0, 3).map((q) => String(q).trim());
+            }
+          } catch (_) {}
+        }
+        if (questions.length < 3) {
+          const lines = reply.split("\n")
+            .map(l => l.replace(/^[\d+.\-*•\s]+/, "").trim())
+            .filter(l => l.length >= 10 && (l.endsWith("?") || l.includes("무엇") || l.includes("어떤")));
+          if (lines.length >= 3) {
+            questions = lines.slice(0, 3);
           }
+        }
+        if (questions.length >= 3) {
+          return questions;
         }
       } catch (e) {
         console.warn("inferRecommendedQuestions API failed, falling back to heuristics:", e);
@@ -1306,15 +1325,16 @@ ${text}`;
           .join("\n");
 
         const prompt = `기준 논문: "${paper.title}" (키워드: ${(paper.keywordsList || []).join(", ")})
+기준 논문 초록/요약: ${(paper.abstractEn || paper.summaryText || "").slice(0, 300)}
 
 추천 후보 논문 목록:
 ${paperSummaries}
 
-당신은 연구자를 돕는 AI 모델(${modelName})입니다.
-각 후보 논문이 기준 논문과 어떤 학술적 연관성을 갖는지, 왜 읽어볼 가치가 있는지 1문장 맞춤 추천 근거를 작성해 주세요.
+당신은 연구자를 돕는 전문 AI 모델(${modelName})입니다.
+각 후보 논문이 기준 논문과 어떤 학술적 연관성을 갖는지, 왜 읽어볼 가치가 있는지 1~2문장의 심층 맞춤 추천 근거를 작성해 주세요.
 반드시 아래와 같은 JSON 배열 형식으로만 응답하세요:
 [
-  { "index": 1, "matchRate": "95%", "recommendLabel": "핵심 선행 연구", "aiRationale": "이 논문은 기준 논문의 핵심 방법론과 직접 연결된 원천 연구로 필독 가치가 있습니다." }
+  { "index": 1, "matchRate": "96%", "recommendLabel": "핵심 선행 연구", "aiRationale": "기준 논문의 핵심 메커니즘을 심화 발전시킨 연구로 실무적 구현에 직결됩니다." }
 ]`;
 
         const reply = await this.callActiveAIModel(prompt, {
@@ -1331,7 +1351,7 @@ ${paperSummaries}
               ...p,
               aiRationale: rationale,
               aiReason: rationale,
-              matchRate: found?.matchRate || p.matchRate || `${95 - idx * 2}%`,
+              matchRate: found?.matchRate || p.matchRate || `${96 - idx * 2}%`,
               recommendLabel: found?.recommendLabel || p.recommendLabel || "AI 추천 논문",
               recommendedByModel: modelName
             };
@@ -1367,11 +1387,11 @@ ${paperSummaries}
 
     let intentBadge = "";
     if (intentType === "curiosity") {
-      intentBadge = `> **💡 [질문 의도 파악: 직관적 호기심 탐구]** 핵심 개념을 알기 쉬운 일상 비유와 직관으로 풀어냅니다.\n\n`;
+      intentBadge = `> **💡 [질문 의도 분석: 직관적 호기심 탐구]** 핵심 개념을 알기 쉬운 일상 비유와 직관으로 풀어냅니다.\n\n`;
     } else if (intentType === "general") {
-      intentBadge = `> **🌐 [질문 의도 파악: 연구 확장 및 거시 질의]** 학술 분야 전반의 맥락과 통찰을 바탕으로 답변합니다.\n\n`;
+      intentBadge = `> **🌐 [질문 의도 분석: 연구 확장 및 거시 질의]** 학술 분야 전반의 맥락과 통찰을 바탕으로 답변합니다.\n\n`;
     } else {
-      intentBadge = `> **🎯 [질문 의도 파악: 논문 심층 질의]** 논문 본문의 구체적 근거와 학술적 논지를 바탕으로 분석합니다.\n\n`;
+      intentBadge = `> **🎯 [질문 의도 분석: 논문 심층 질의]** 논문 본문의 구체적 근거와 학술적 논지를 바탕으로 분석합니다.\n\n`;
     }
 
     const refNames = extraRefPapers.length > 0 ? `\n[추가 참고 논문]: ${extraRefPapers.join(", ")}` : "";
@@ -1379,6 +1399,20 @@ ${paperSummaries}
     const paperHeader = paper
       ? `현재 논문: "${paper.title}" (${(paper.authors || []).join(", ")}, ${paper.year || ""})\n초록: ${paper.abstractEn || paper.summaryText || ""}\n요약: ${(paper.threeLineSummary || []).join(" / ")}`
       : "현재 열려 있는 논문이 없는 초기 상태입니다. 사용자의 학술/연구 질문에 친절히 답변하세요.";
+
+    let sectionExcerpt = "";
+    if (paper && Array.isArray(paper.sections)) {
+      const secLines = [];
+      for (const s of paper.sections.slice(0, 8)) {
+        const pTexts = (s.paragraphs || []).slice(0, 3).map((p) => p.en || p.ko || "").filter(Boolean).join("\n");
+        if (pTexts) {
+          secLines.push(`[섹션 ${s.number || ""}: ${s.title}]\n${pTexts}`);
+        }
+      }
+      if (secLines.length > 0) {
+        sectionExcerpt = "\n\n[논문 본문 핵심 내용 발췌]:\n" + secLines.join("\n\n").slice(0, 7000);
+      }
+    }
 
     const intentPromptGuide = `[사용자 질문 의도 자동 파악 및 맞춤 응답 지침]
 당신은 연구자를 돕는 전문 AI 모델(${modelName})입니다.
@@ -1393,12 +1427,12 @@ ${paperSummaries}
 
 [필수 출력 형식]
 답변의 첫 번째 줄은 반드시 파악한 의도에 맞는 인용 블록 뱃지로 시작하세요:
-- 논문 질의: > **🎯 [질문 의도 파악: 논문 심층 질의]** 논문 본문의 구체적 근거를 바탕으로 분석합니다.
-- 호기심 질의: > **💡 [질문 의도 파악: 직관적 호기심 탐구]** 핵심 개념을 알기 쉬운 일상 비유와 직관으로 풀어냅니다.
-- 확장/기타 질의: > **🌐 [질문 의도 파악: 연구 확장 및 거시 질의]** 학술 분야 전반의 맥락과 통찰을 바탕으로 답변합니다.
+- 논문 질의: > **🎯 [질문 의도 분석: 논문 심층 질의]** 논문 본문의 구체적 근거를 바탕으로 분석합니다.
+- 호기심 질의: > **💡 [질문 의도 분석: 직관적 호기심 탐구]** 핵심 개념을 알기 쉬운 일상 비유와 직관으로 풀어냅니다.
+- 확장/기타 질의: > **🌐 [질문 의도 분석: 연구 확장 및 거시 질의]** 학술 분야 전반의 맥락과 통찰을 바탕으로 답변합니다.
 그 뒤 빈 줄 1개를 두고, ${lang.label} 언어로 정돈된 마크다운 본문을 작성하세요.`;
 
-    const fullPrompt = `${paperHeader}${refNames}${contextStr}\n\n${intentPromptGuide}\n\n[사용자 질문]: ${userMessage}`;
+    const fullPrompt = `${paperHeader}${sectionExcerpt}${refNames}${contextStr}\n\n${intentPromptGuide}\n\n[사용자 질문]: ${userMessage}`;
 
     // Execute active model if verified
     if (this.isProviderVerified(provider)) {
@@ -1408,13 +1442,16 @@ ${paperSummaries}
         });
         if (liveReply && liveReply.trim()) {
           let formattedReply = liveReply.trim();
-          if (!formattedReply.includes("질문 의도 파악")) {
+          if (!formattedReply.includes("질문 의도")) {
             formattedReply = intentBadge + formattedReply;
           }
-          return formattedReply;
+          const liveBadge = `> **✨ [${modelName} 실시간 본문 추론 답변]**\n`;
+          return liveBadge + formattedReply;
         }
       } catch (e) {
         console.warn(`${provider} API chat live call failed, falling back to heuristics:`, e);
+        const failNotice = `> **⚠️ [${modelName} 실시간 통신 지연 안내]** (${this.escapeHtml ? this.escapeHtml(e.message || "연결 지연") : "일시적 응답 지연"})\n> *원활한 연구 진행을 위해 로컬 보조 분석 결과로 응답합니다.*\n\n`;
+        intentBadge = failNotice + intentBadge;
       }
     }
 
